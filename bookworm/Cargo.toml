@@ -1,0 +1,19 @@
+[package]
+name = "bookworm"
+version = "1.0.0"
+edition = "2024"
+authors = ["Aaron"]
+description = "CLI tool to clean and standardize epub filenames using AI"
+license = "PolyForm-Noncommercial-1.0.0"
+
+[[bin]]
+name = "bookworm"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+anyhow = { workspace = true }
+llm-client = { path = "../llm-client" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+walkdir = "2"
+epub = "2.1"
