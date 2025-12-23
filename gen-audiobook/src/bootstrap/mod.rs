@@ -22,8 +22,10 @@ pub struct BootstrapPaths {
     /// Path to the Python executable in the venv.
     pub python: PathBuf,
     /// Path to FFmpeg executable.
+    #[allow(dead_code)]
     pub ffmpeg: PathBuf,
     /// Path to FFprobe executable.
+    #[allow(dead_code)]
     pub ffprobe: PathBuf,
 }
 

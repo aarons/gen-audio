@@ -77,6 +77,7 @@ impl WorkersConfig {
     }
 
     /// Get workers by names (comma-separated).
+    #[allow(dead_code)]
     pub fn get_workers_by_names(&self, names: &str) -> Vec<&WorkerConfig> {
         names
             .split(',')
@@ -228,6 +229,7 @@ impl WorkerConfig {
     }
 
     /// Get effective job timeout.
+    #[allow(dead_code)]
     pub fn job_timeout(&self, defaults: &WorkerDefaults) -> u64 {
         self.job_timeout_secs.unwrap_or(defaults.job_timeout_secs)
     }

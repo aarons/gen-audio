@@ -192,6 +192,7 @@ pub fn assemble_m4b(
 }
 
 /// Check if FFmpeg is available (bootstrapped or system).
+#[allow(dead_code)]
 pub fn is_ffmpeg_available() -> bool {
     ffmpeg_command()
         .arg("-version")
@@ -201,6 +202,7 @@ pub fn is_ffmpeg_available() -> bool {
 }
 
 /// Check if FFprobe is available (bootstrapped or system).
+#[allow(dead_code)]
 pub fn is_ffprobe_available() -> bool {
     ffprobe_command()
         .arg("-version")

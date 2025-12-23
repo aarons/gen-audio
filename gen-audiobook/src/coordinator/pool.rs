@@ -118,7 +118,7 @@ impl Worker {
     /// Execute job and parse result.
     async fn execute_job(&self, job_json: &str, timeout: u64) -> Result<TtsResult> {
         // Create a connection with job timeout
-        let mut conn = SshConnection::new(self.config.clone(), timeout);
+        let conn = SshConnection::new(self.config.clone(), timeout);
 
         let output = conn.exec_with_input("gena worker run", job_json.as_bytes()).await
             .with_context(|| format!("Job execution failed on worker '{}'", self.name()))?;
@@ -209,6 +209,7 @@ impl WorkerPool {
     }
 
     /// Get list of workers that can accept jobs.
+    #[allow(dead_code)]
     pub fn available_workers(&self) -> Vec<&Worker> {
         self.workers
             .iter()
@@ -272,6 +273,7 @@ impl WorkerPool {
     }
 
     /// Get summary of pool status.
+    #[allow(dead_code)]
     pub fn status_summary(&self) -> PoolStatus {
         let total = self.workers.len();
         let connected = self.workers.iter().filter(|w| w.connected).count();
@@ -289,6 +291,7 @@ impl WorkerPool {
 
 /// Summary of pool status.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PoolStatus {
     pub total: usize,
     pub connected: usize,

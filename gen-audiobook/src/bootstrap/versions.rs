@@ -61,12 +61,14 @@ impl InstalledVersions {
     }
 
     /// Check if the installed Python matches the current pinned version.
+    #[allow(dead_code)]
     pub fn is_python_current(&self) -> bool {
         self.python_version.as_deref() == Some(PYTHON_VERSION)
             && self.python_release_tag.as_deref() == Some(PYTHON_RELEASE_TAG)
     }
 
     /// Check if the installed FFmpeg is present.
+    #[allow(dead_code)]
     pub fn has_ffmpeg(&self) -> bool {
         self.ffmpeg_version.is_some()
     }

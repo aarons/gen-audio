@@ -2,7 +2,7 @@
 
 use super::pool::WorkerPool;
 use crate::worker::protocol::{JobStatus, TtsJob, TtsJobOptions, TtsResult};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -10,6 +10,7 @@ use tokio::sync::{mpsc, Mutex};
 
 /// Progress information for the scheduler.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SchedulerProgress {
     /// Total number of jobs.
     pub total_jobs: usize,
@@ -25,6 +26,7 @@ pub struct SchedulerProgress {
 
 /// Per-worker progress.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct WorkerProgress {
     /// Worker name.
     pub name: String,
@@ -299,6 +301,7 @@ impl JobScheduler {
     }
 
     /// Get completed results grouped by chapter.
+    #[allow(dead_code)]
     pub fn results_by_chapter(&self) -> std::collections::HashMap<usize, Vec<&TtsResult>> {
         let mut by_chapter: std::collections::HashMap<usize, Vec<&TtsResult>> =
             std::collections::HashMap::new();
@@ -320,6 +323,7 @@ impl JobScheduler {
 }
 
 /// Parse chapter number from job ID.
+#[allow(dead_code)]
 fn parse_chapter_from_job_id(job_id: &str) -> Option<usize> {
     // Format: session_chXXX_ckYYYY
     let parts: Vec<&str> = job_id.split('_').collect();
@@ -332,6 +336,7 @@ fn parse_chapter_from_job_id(job_id: &str) -> Option<usize> {
 }
 
 /// Parse chunk number from job ID.
+#[allow(dead_code)]
 fn parse_chunk_from_job_id(job_id: &str) -> Option<usize> {
     let parts: Vec<&str> = job_id.split('_').collect();
     for part in parts {

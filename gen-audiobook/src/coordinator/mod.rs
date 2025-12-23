@@ -7,12 +7,11 @@ pub mod pool;
 pub mod scheduler;
 pub mod ssh;
 
-pub use config::{WorkerConfig, WorkerDefaults, WorkersConfig};
-pub use pool::{PoolStatus, Worker, WorkerPool};
-pub use scheduler::{create_jobs, JobScheduler, SchedulerProgress, WorkerProgress};
+pub use config::{WorkerConfig, WorkersConfig};
+pub use pool::WorkerPool;
+pub use scheduler::{create_jobs, JobScheduler};
 pub use ssh::SshConnection;
 
-use crate::worker::protocol::TtsJobOptions;
 use anyhow::{Context, Result};
 use clap::Subcommand;
 use std::path::PathBuf;

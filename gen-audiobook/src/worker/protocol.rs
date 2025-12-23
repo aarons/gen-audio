@@ -137,6 +137,7 @@ impl TtsResult {
     }
 
     /// Create a timeout result.
+    #[allow(dead_code)]
     pub fn timeout(job_id: impl Into<String>) -> Self {
         Self {
             version: PROTOCOL_VERSION,

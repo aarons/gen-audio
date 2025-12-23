@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 /// SSH connection to a remote worker.
@@ -32,6 +32,7 @@ impl SshConnection {
     }
 
     /// Get the worker name.
+    #[allow(dead_code)]
     pub fn name(&self) -> &str {
         &self.config.name
     }
@@ -73,6 +74,7 @@ impl SshConnection {
     }
 
     /// Establish a control master connection for multiplexing.
+    #[allow(dead_code)]
     pub async fn establish_control_master(&mut self) -> Result<()> {
         // Create a unique control socket path
         let socket_dir = std::env::temp_dir().join("gena-ssh");
@@ -125,6 +127,7 @@ impl SshConnection {
     }
 
     /// Close the control master connection.
+    #[allow(dead_code)]
     pub async fn close_control_master(&self) -> Result<()> {
         if let Some(ref socket) = self.control_socket {
             let args = vec![

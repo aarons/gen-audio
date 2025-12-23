@@ -20,10 +20,9 @@ pub mod executor;
 pub mod protocol;
 
 pub use executor::{
-    execute_job, execute_job_from_stdin, get_output_path, get_voice_path,
+    execute_job_from_stdin,
     get_worker_status, output_dir, voices_dir,
 };
-pub use protocol::{JobStatus, TtsJob, TtsJobOptions, TtsResult, WorkerStatus, PROTOCOL_VERSION};
 
 use anyhow::{Context, Result};
 use clap::Subcommand;
@@ -148,7 +147,7 @@ fn handle_clean(include_voices: bool) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::protocol::PROTOCOL_VERSION;
 
     #[test]
     fn test_protocol_version() {

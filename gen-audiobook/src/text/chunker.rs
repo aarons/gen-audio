@@ -303,4 +303,115 @@ mod tests {
         let parts = split_on_words(text, 10);
         assert_eq!(parts, vec!["one two", "three four", "five"]);
     }
+
+    // ==================== Chunk Uniqueness Tests ====================
+
+    #[test]
+    fn test_chunks_cover_all_sentences() {
+        // Verify all input sentences appear in output chunks
+        let text = "First sentence. Second sentence. Third sentence.";
+        let chunks = chunk_text(text, 30, 50);
+        let rejoined = chunks.join(" ");
+
+        // All sentences should be present (normalized form)
+        assert!(
+            rejoined.contains("First sentence"),
+            "Missing 'First sentence' in chunks: {:?}",
+            chunks
+        );
+        assert!(
+            rejoined.contains("Second sentence"),
+            "Missing 'Second sentence' in chunks: {:?}",
+            chunks
+        );
+        assert!(
+            rejoined.contains("Third sentence"),
+            "Missing 'Third sentence' in chunks: {:?}",
+            chunks
+        );
+    }
+
+    #[test]
+    fn test_chunks_no_duplicate_sentences() {
+        // Verify no sentence appears in multiple chunks
+        let text = "Alpha. Beta. Gamma. Delta. Epsilon.";
+        let chunks = chunk_text(text, 15, 30);
+
+        // Use unique words to verify no duplicates
+        let unique_words = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"];
+
+        for word in unique_words {
+            let count: usize = chunks.iter().filter(|c| c.contains(word)).count();
+            assert_eq!(
+                count, 1,
+                "Word '{}' appears in {} chunks (expected 1): {:?}",
+                word, count, chunks
+            );
+        }
+    }
+
+    #[test]
+    fn test_chunks_preserve_sentence_boundaries() {
+        // Verify sentences aren't split mid-word across chunks
+        let text = "The quick brown fox. Jumps over the lazy dog.";
+        let chunks = chunk_text(text, 25, 50);
+
+        // Words should be complete in each chunk
+        for chunk in &chunks {
+            // No chunk should start or end with a partial word (indicated by space issues)
+            let trimmed = chunk.trim();
+            assert!(
+                !trimmed.starts_with(' '),
+                "Chunk starts with space: '{}'",
+                chunk
+            );
+            assert!(
+                !trimmed.ends_with(' '),
+                "Chunk ends with space: '{}'",
+                chunk
+            );
+        }
+    }
+
+    #[test]
+    fn test_chunks_total_content_matches() {
+        // Verify the total character count roughly matches (allowing for whitespace normalization)
+        let text = "One. Two. Three. Four. Five. Six. Seven. Eight. Nine. Ten.";
+        let chunks = chunk_text(text, 20, 40);
+
+        // Count alphanumeric characters in original
+        let orig_alphanum: usize = text.chars().filter(|c| c.is_alphanumeric()).count();
+
+        // Count alphanumeric characters in chunks
+        let chunks_alphanum: usize = chunks
+            .iter()
+            .flat_map(|c| c.chars())
+            .filter(|c| c.is_alphanumeric())
+            .count();
+
+        assert_eq!(
+            orig_alphanum, chunks_alphanum,
+            "Alphanumeric count mismatch: original {} vs chunks {}",
+            orig_alphanum, chunks_alphanum
+        );
+    }
+
+    #[test]
+    fn test_chunks_no_overlap_with_long_text() {
+        // Test with longer text to catch edge cases
+        let text = "Sentence one here. Sentence two here. Sentence three here. \
+                    Sentence four here. Sentence five here. Sentence six here. \
+                    Sentence seven here. Sentence eight here. Sentence nine here.";
+        let chunks = chunk_text(text, 50, 80);
+
+        // Verify unique numbered words appear exactly once across all chunks
+        for num in ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"] {
+            let occurrences: usize = chunks.iter().map(|c| c.matches(num).count()).sum();
+            assert_eq!(
+                occurrences, 1,
+                "Word '{}' appears {} times in chunks (expected 1): {:?}",
+                num, occurrences, chunks
+            );
+        }
+    }
 }

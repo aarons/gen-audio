@@ -23,11 +23,13 @@ pub fn is_chatterbox_installed() -> Result<bool> {
 }
 
 /// Get environment info for diagnostics.
+#[allow(dead_code)]
 pub fn get_env_info() -> Result<String> {
     bootstrap::python::get_env_info()
 }
 
 /// Check if setup is needed.
+#[allow(dead_code)]
 pub fn check_setup_needed() -> Result<bool> {
     Ok(bootstrap::check_status()? != bootstrap::BootstrapStatus::Ready)
 }

@@ -10,6 +10,7 @@ use thiserror::Error;
 
 /// Download-related errors.
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 pub enum DownloadError {
     #[error("Download failed after {attempts} attempts: {message}")]
     Failed { attempts: u32, message: String },

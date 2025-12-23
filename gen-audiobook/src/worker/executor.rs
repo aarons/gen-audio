@@ -194,6 +194,7 @@ fn get_available_disk_mb() -> Result<u64> {
 }
 
 /// Clean up old output files.
+#[allow(dead_code)]
 pub fn cleanup_output(job_id: &str) -> Result<()> {
     let path = get_output_path(job_id);
     if path.exists() {
