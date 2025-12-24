@@ -12,7 +12,7 @@ use std::time::Instant;
 fn worker_data_dir() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("gena")
+        .join("gen-audio")
         .join("worker")
 }
 
@@ -223,6 +223,6 @@ mod tests {
     fn test_worker_status() {
         // Just verify it doesn't panic
         let status = get_worker_status();
-        assert!(!status.gena_version.is_empty());
+        assert!(!status.gen_audio_version.is_empty());
     }
 }

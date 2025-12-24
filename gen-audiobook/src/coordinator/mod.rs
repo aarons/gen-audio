@@ -54,7 +54,7 @@ pub enum WorkersCommand {
         name: Option<String>,
     },
 
-    /// Set up a worker remotely (install gena and dependencies).
+    /// Set up a worker remotely (install gen-audio and dependencies).
     Setup {
         /// Name of worker to set up.
         name: String,
@@ -97,7 +97,7 @@ fn list_workers() -> Result<()> {
         println!("No workers configured.");
         println!();
         println!("Add a worker with:");
-        println!("  gena workers add <name> <host> -u <user>");
+        println!("  gen-audio workers add <name> <host> -u <user>");
         return Ok(());
     }
 
@@ -237,21 +237,21 @@ async fn setup_worker(name: &str) -> Result<()> {
         println!("Found: {}", gpu);
     }
 
-    // Check if gena is installed
-    print!("Checking for gena... ");
-    let gena_check = conn.exec("which gena 2>/dev/null || echo 'NOT_FOUND'").await?;
-    if gena_check.trim() == "NOT_FOUND" {
+    // Check if gen-audio is installed
+    print!("Checking for gen-audio... ");
+    let install_check = conn.exec("which gen-audio 2>/dev/null || echo 'NOT_FOUND'").await?;
+    if install_check.trim() == "NOT_FOUND" {
         println!("NOT INSTALLED");
         println!();
-        println!("To install gena on the worker, SSH in and run:");
+        println!("To install gen-audio on the worker, SSH in and run:");
         println!("  cargo install --git https://github.com/your/repo gen-audiobook");
-        println!("  gena worker install");
+        println!("  gen-audio worker install");
     } else {
         println!("OK");
 
         // Run worker install
         print!("Running worker install... ");
-        let install_result = conn.exec("gena worker install 2>&1").await;
+        let install_result = conn.exec("gen-audio worker install 2>&1").await;
         match install_result {
             Ok(output) => {
                 println!("OK");

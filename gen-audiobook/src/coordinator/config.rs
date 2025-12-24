@@ -68,7 +68,7 @@ impl WorkersConfig {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("cli-programs")
-            .join("gena-workers.toml")
+            .join("gen-audio-workers.toml")
     }
 
     /// Get a worker by name.

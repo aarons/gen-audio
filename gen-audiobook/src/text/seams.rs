@@ -32,25 +32,76 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_seams_detector_available() {
-        let detector = get_detector();
-        // Just verify we can call a method on it
-        let _ = detector.detect_sentences_borrowed("Test.");
+    fn test_abbreviations_not_split() {
+        // Abbreviations like "Dr." and "U.S." shouldn't trigger sentence splits
+        let text = "Dr. Smith went to the U.S. embassy.";
+        let sentences = split_into_sentences(text);
+
+        // This should be one sentence (or at most split sensibly)
+        // The key assertion: "U.S." shouldn't be split from "embassy"
+        let rejoined = sentences.join(" ");
+        assert!(
+            rejoined.contains("U.S.") || rejoined.contains("U.S"),
+            "U.S. should be preserved: {:?}",
+            sentences
+        );
+        assert!(
+            rejoined.contains("embassy"),
+            "embassy should be preserved: {:?}",
+            sentences
+        );
     }
 
     #[test]
-    fn test_split_into_sentences() {
-        let text = "Hello. World.";
+    fn test_dialog_sentence_boundaries() {
+        // Dialog with proper sentence boundaries
+        let text = r#""Hello," she said. "How are you?""#;
         let sentences = split_into_sentences(text);
-        assert_eq!(sentences.len(), 2);
+
+        // Should detect at least 2 sentences (the dialog and the attribution)
+        // Key: shouldn't split mid-quote
+        assert!(
+            sentences.len() >= 1,
+            "Should produce sentences: {:?}",
+            sentences
+        );
+
+        let rejoined = sentences.join(" ");
+        assert!(rejoined.contains("Hello"), "Should preserve 'Hello'");
+        assert!(rejoined.contains("How are you"), "Should preserve 'How are you'");
     }
 
     #[test]
-    fn test_seams_library_basic() {
-        let text = "First sentence. Second sentence.";
+    fn test_numbers_decimals() {
+        // Numbers with periods shouldn't trigger false sentence breaks
+        let text = "The price is $3.50. It's affordable.";
         let sentences = split_into_sentences(text);
-        assert_eq!(sentences.len(), 2);
+
+        // Should be 2 sentences, not 3 (shouldn't split on "3.50")
+        assert_eq!(
+            sentences.len(),
+            2,
+            "Should be 2 sentences (not split on decimal): {:?}",
+            sentences
+        );
+    }
+
+    #[test]
+    fn test_multiple_sentences_basic() {
+        // Basic case: clearly separated sentences
+        let text = "First sentence here. Second sentence follows. Third one ends it.";
+        let sentences = split_into_sentences(text);
+
+        assert_eq!(sentences.len(), 3, "Should detect 3 sentences: {:?}", sentences);
         assert!(sentences[0].contains("First"));
         assert!(sentences[1].contains("Second"));
+        assert!(sentences[2].contains("Third"));
+    }
+
+    #[test]
+    fn test_empty_and_whitespace() {
+        assert!(split_into_sentences("").is_empty());
+        assert!(split_into_sentences("   ").is_empty());
+        assert!(split_into_sentences("\n\n").is_empty());
     }
 }

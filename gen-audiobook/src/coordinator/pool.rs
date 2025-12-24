@@ -69,7 +69,7 @@ impl Worker {
         self.connected = true;
 
         // Get worker status
-        let output = self.connection.exec("gena worker status").await
+        let output = self.connection.exec("gen-audio worker status").await
             .with_context(|| format!("Failed to get status from worker '{}'", self.name()))?;
 
         let status: WorkerStatus = serde_json::from_str(&output)
@@ -81,16 +81,16 @@ impl Worker {
 
     /// Check if voice reference is uploaded.
     pub async fn has_voice_ref(&self, hash: &str) -> Result<bool> {
-        let remote_path = format!("~/.gena/worker/voices/{}.wav", hash);
+        let remote_path = format!("~/.gen-audio/worker/voices/{}.wav", hash);
         self.connection.file_exists(&remote_path).await
     }
 
     /// Upload voice reference file.
     pub async fn upload_voice_ref(&self, local_path: &Path, hash: &str) -> Result<()> {
         // Create voices directory
-        self.connection.mkdir("~/.gena/worker/voices").await?;
+        self.connection.mkdir("~/.gen-audio/worker/voices").await?;
 
-        let remote_path = format!("~/.gena/worker/voices/{}.wav", hash);
+        let remote_path = format!("~/.gen-audio/worker/voices/{}.wav", hash);
         self.connection.upload(local_path, &remote_path).await
             .with_context(|| format!("Failed to upload voice reference to '{}'", self.name()))
     }
@@ -120,7 +120,7 @@ impl Worker {
         // Create a connection with job timeout
         let conn = SshConnection::new(self.config.clone(), timeout);
 
-        let output = conn.exec_with_input("gena worker run", job_json.as_bytes()).await
+        let output = conn.exec_with_input("gen-audio worker run", job_json.as_bytes()).await
             .with_context(|| format!("Job execution failed on worker '{}'", self.name()))?;
 
         let result: TtsResult = serde_json::from_slice(&output)

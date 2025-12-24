@@ -77,7 +77,7 @@ impl SshConnection {
     #[allow(dead_code)]
     pub async fn establish_control_master(&mut self) -> Result<()> {
         // Create a unique control socket path
-        let socket_dir = std::env::temp_dir().join("gena-ssh");
+        let socket_dir = std::env::temp_dir().join("gen-audio-ssh");
         std::fs::create_dir_all(&socket_dir)
             .context("Failed to create control socket directory")?;
 

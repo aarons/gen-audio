@@ -1,4 +1,4 @@
-# gena
+# gen-audio
 
 Convert EPUB files to audiobooks using Chatterbox TTS (neural text-to-speech with voice cloning).
 
@@ -27,41 +27,41 @@ cargo run -p update-cli-programs --release
 
 ```bash
 # Convert an EPUB to audiobook (auto-downloads dependencies on first run)
-gena book.epub
+gen-audio book.epub
 
 # Use a custom voice (clone from audio sample)
-gena book.epub --voice reference.wav
+gen-audio book.epub --voice reference.wav
 
 # Specify output file
-gena book.epub -o audiobook.m4b
+gen-audio book.epub -o audiobook.m4b
 ```
 
-On first run, gena will download (~2.1 GB total):
+On first run, gen-audio will download (~2.1 GB total):
 - Python 3.11 (~25 MB)
 - FFmpeg 7.1 (~30 MB)
 - Chatterbox TTS + PyTorch (~2 GB)
 
-All dependencies are stored in `~/.local/share/gena/` and can be removed with `gena uninstall`.
+All dependencies are stored in `~/.local/share/gen-audio/` and can be removed with `gen-audio uninstall`.
 
 ## Usage
 
 ```bash
 # Basic conversion
-gena book.epub
+gen-audio book.epub
 
 # Use voice cloning
-gena book.epub --voice my-voice.wav
+gen-audio book.epub --voice my-voice.wav
 
 # Adjust TTS parameters
-gena book.epub --exaggeration 0.7 --cfg 0.5 --temperature 0.8
+gen-audio book.epub --exaggeration 0.7 --cfg 0.5 --temperature 0.8
 
 # Convert specific chapters
-gena book.epub --chapters 0-10
+gen-audio book.epub --chapters 0-10
 
 # Force GPU device
-gena book.epub --device mps    # Apple Silicon
-gena book.epub --device cuda   # NVIDIA GPU
-gena book.epub --device cpu    # Force CPU
+gen-audio book.epub --device mps    # Apple Silicon
+gen-audio book.epub --device cuda   # NVIDIA GPU
+gen-audio book.epub --device cpu    # Force CPU
 ```
 
 ### TTS Parameters
@@ -74,51 +74,51 @@ gena book.epub --device cpu    # Force CPU
 
 ## Configuration
 
-Configuration is stored at `~/.config/cli-programs/gena.toml`.
+Configuration is stored at `~/.config/cli-programs/gen-audio.toml`.
 
 ```bash
 # Show current configuration
-gena config show
+gen-audio config show
 
 # Set default voice reference
-gena config set-voice ~/voices/narrator.wav
+gen-audio config set-voice ~/voices/narrator.wav
 
 # Set default exaggeration
-gena config set-exaggeration 0.6
+gen-audio config set-exaggeration 0.6
 
 # Set default CFG/pacing
-gena config set-cfg 0.5
+gen-audio config set-cfg 0.5
 
 # Set default temperature
-gena config set-temperature 0.8
+gen-audio config set-temperature 0.8
 ```
 
 ## Managing Dependencies
 
 ```bash
 # Show environment info
-gena info
+gen-audio info
 
 # Upgrade Python packages
-gena setup --upgrade
+gen-audio setup --upgrade
 
 # Remove and re-download all dependencies
-gena setup --clean
+gen-audio setup --clean
 
-# Uninstall all gena dependencies (~2.5 GB)
-gena uninstall
+# Uninstall all gen-audio dependencies (~2.5 GB)
+gen-audio uninstall
 
 # Also remove Chatterbox models from cache (~1-2 GB)
-gena uninstall --include-models
+gen-audio uninstall --include-models
 ```
 
 ### Storage Locations
 
 | Location | Contents |
 |----------|----------|
-| `~/.local/share/gena/` | Python, FFmpeg, venv, sessions |
+| `~/.local/share/gen-audio/` | Python, FFmpeg, venv, sessions |
 | `~/.cache/huggingface/` | Chatterbox model weights (shared) |
-| `~/.config/cli-programs/gena.toml` | Configuration |
+| `~/.config/cli-programs/gen-audio.toml` | Configuration |
 
 ## How It Works
 
@@ -161,10 +161,10 @@ The development Python is stored at `target/python-dev/` and is cleaned by `carg
 The first synthesis triggers Chatterbox model download (~1-2 GB). Subsequent runs are faster.
 
 ### Out of memory
-Try using CPU instead of GPU: `gena book.epub --device cpu`
+Try using CPU instead of GPU: `gen-audio book.epub --device cpu`
 
 ### Voice sounds robotic
-Increase exaggeration: `gena book.epub --exaggeration 0.8`
+Increase exaggeration: `gen-audio book.epub --exaggeration 0.8`
 
 ### Audio has artifacts
-Try lowering temperature: `gena book.epub --temperature 0.5`
+Try lowering temperature: `gen-audio book.epub --temperature 0.5`

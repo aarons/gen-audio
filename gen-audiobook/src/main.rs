@@ -1,4 +1,4 @@
-//! gena - Convert EPUB files to audiobooks using Chatterbox TTS
+//! gen-audio - Convert EPUB files to audiobooks using Chatterbox TTS
 
 mod audio;
 mod bootstrap;
@@ -13,7 +13,7 @@ mod worker;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use config::GenaConfig;
+use config::GenAudioConfig;
 use indicatif::{ProgressBar, ProgressStyle};
 use session::Session;
 use std::path::PathBuf;
@@ -21,7 +21,7 @@ use text::TextChunk;
 use tts::TtsOptions;
 
 #[derive(Parser, Debug)]
-#[command(name = "gena")]
+#[command(name = "gen-audio")]
 #[command(about = "Convert EPUB files to audiobooks using Chatterbox TTS", long_about = None)]
 #[command(version)]
 struct Args {
@@ -89,7 +89,7 @@ enum Commands {
         #[arg(long)]
         clean: bool,
     },
-    /// Remove all gena dependencies from the system
+    /// Remove all gen-audio dependencies from the system
     Uninstall {
         /// Also remove Chatterbox models from HuggingFace cache
         #[arg(long)]
@@ -179,14 +179,14 @@ async fn main() -> Result<()> {
     let epub_path = args
         .epub_file
         .clone()
-        .ok_or_else(|| anyhow::anyhow!("EPUB file path is required. Run 'gena --help' for usage."))?;
+        .ok_or_else(|| anyhow::anyhow!("EPUB file path is required. Run 'gen-audio --help' for usage."))?;
 
     if !epub_path.exists() {
         anyhow::bail!("EPUB file not found: {}", epub_path.display());
     }
 
     // Load configuration
-    let config = GenaConfig::load().context("Failed to load configuration")?;
+    let config = GenAudioConfig::load().context("Failed to load configuration")?;
 
     // Determine output path (M4B for audiobook with chapters)
     let output_path = args.output.clone().unwrap_or_else(|| {
@@ -428,7 +428,7 @@ async fn process_distributed(
 
     if workers_config.workers.is_empty() {
         anyhow::bail!(
-            "No workers configured. Add workers with: gena workers add <name> <host> -u <user>"
+            "No workers configured. Add workers with: gen-audio workers add <name> <host> -u <user>"
         );
     }
 
@@ -711,8 +711,8 @@ fn detect_cover_filename(data: &[u8]) -> &'static str {
 fn handle_config_command(action: &ConfigAction) -> Result<()> {
     match action {
         ConfigAction::Show => {
-            let config = GenaConfig::load()?;
-            println!("Configuration file: {:?}", GenaConfig::config_path()?);
+            let config = GenAudioConfig::load()?;
+            println!("Configuration file: {:?}", GenAudioConfig::config_path()?);
             println!();
             if let Some(voice) = &config.voice_ref {
                 println!("voice_ref = \"{}\"", voice.display());
@@ -729,25 +729,25 @@ fn handle_config_command(action: &ConfigAction) -> Result<()> {
             }
         }
         ConfigAction::SetVoice { path } => {
-            let mut config = GenaConfig::load()?;
+            let mut config = GenAudioConfig::load()?;
             config.voice_ref = Some(path.clone());
             config.save()?;
             println!("Default voice reference set to: {}", path.display());
         }
         ConfigAction::SetExaggeration { value } => {
-            let mut config = GenaConfig::load()?;
+            let mut config = GenAudioConfig::load()?;
             config.exaggeration = value.clamp(0.25, 2.0);
             config.save()?;
             println!("Default exaggeration set to: {}", config.exaggeration);
         }
         ConfigAction::SetCfg { value } => {
-            let mut config = GenaConfig::load()?;
+            let mut config = GenAudioConfig::load()?;
             config.cfg = value.clamp(0.0, 1.0);
             config.save()?;
             println!("Default CFG set to: {}", config.cfg);
         }
         ConfigAction::SetTemperature { value } => {
-            let mut config = GenaConfig::load()?;
+            let mut config = GenAudioConfig::load()?;
             config.temperature = value.clamp(0.05, 5.0);
             config.save()?;
             println!("Default temperature set to: {}", config.temperature);
@@ -757,7 +757,7 @@ fn handle_config_command(action: &ConfigAction) -> Result<()> {
 }
 
 fn show_info() -> Result<()> {
-    println!("gena environment info:\n");
+    println!("gen-audio environment info:\n");
     println!("{}", bootstrap::get_info()?);
     Ok(())
 }
@@ -766,13 +766,13 @@ async fn handle_setup_command(upgrade: bool, clean: bool) -> Result<()> {
     if clean {
         eprintln!("Removing bootstrap cache...");
         let stats = bootstrap::clean_all(false)?;
-        if stats.gena_removed {
+        if stats.gen_audio_removed {
             eprintln!(
                 "Removed {} of data.",
-                bootstrap::download::format_bytes(stats.gena_size)
+                bootstrap::download::format_bytes(stats.gen_audio_size)
             );
         }
-        eprintln!("Run 'gena <book.epub>' to re-bootstrap.\n");
+        eprintln!("Run 'gen-audio <book.epub>' to re-bootstrap.\n");
         return Ok(());
     }
 
@@ -791,17 +791,17 @@ async fn handle_setup_command(upgrade: bool, clean: bool) -> Result<()> {
 }
 
 fn handle_uninstall_command(include_models: bool) -> Result<()> {
-    eprintln!("Removing gena dependencies...\n");
+    eprintln!("Removing gen-audio dependencies...\n");
 
     let stats = bootstrap::clean_all(include_models)?;
 
-    if stats.gena_removed {
+    if stats.gen_audio_removed {
         eprintln!(
-            "Removed gena data directory ({}).",
-            bootstrap::download::format_bytes(stats.gena_size)
+            "Removed gen-audio data directory ({}).",
+            bootstrap::download::format_bytes(stats.gen_audio_size)
         );
     } else {
-        eprintln!("No gena data directory found.");
+        eprintln!("No gen-audio data directory found.");
     }
 
     if include_models {

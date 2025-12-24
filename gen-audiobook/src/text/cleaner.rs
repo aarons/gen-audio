@@ -185,4 +185,59 @@ mod tests {
         let cleaned = clean_text(text);
         assert_eq!(cleaned, "Line 1\nLine 2");
     }
+
+    #[test]
+    fn test_mixed_problematic_chars() {
+        // Real-world text with multiple types of problematic characters
+        let text = "\u{201c}Hello,\u{201d} she said\u{2014}pausing\u{2026} \u{2018}What?\u{2019}";
+        let cleaned = clean_text(text);
+
+        // Should normalize all problematic chars
+        assert!(!cleaned.contains('\u{201c}'), "Left double quote not cleaned");
+        assert!(!cleaned.contains('\u{201d}'), "Right double quote not cleaned");
+        assert!(!cleaned.contains('\u{2014}'), "Em-dash not cleaned");
+        assert!(!cleaned.contains('\u{2026}'), "Ellipsis not cleaned");
+        assert!(!cleaned.contains('\u{2018}'), "Left single quote not cleaned");
+        assert!(!cleaned.contains('\u{2019}'), "Right single quote not cleaned");
+
+        // Content should be preserved
+        assert!(cleaned.contains("Hello"), "Content lost");
+        assert!(cleaned.contains("pausing"), "Content lost");
+        assert!(cleaned.contains("What"), "Content lost");
+    }
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn prop_clean_doesnt_explode_size(s in "\\PC{0,500}") {
+                let cleaned = clean_text(&s);
+                // Cleaning should never more than triple the size
+                // (ellipsis → "..." is worst case at 3x for a single char)
+                prop_assert!(
+                    cleaned.len() <= s.len() * 3 + 10,
+                    "Cleaned size {} unexpectedly large for input size {}",
+                    cleaned.len(),
+                    s.len()
+                );
+            }
+
+            #[test]
+            fn prop_clean_produces_valid_string(s in "\\PC{0,500}") {
+                let cleaned = clean_text(&s);
+                // Result should be valid UTF-8 (implicit) and not contain control chars
+                for c in cleaned.chars() {
+                    if c != '\n' && c != '\t' {
+                        prop_assert!(
+                            !c.is_control(),
+                            "Control character {:?} in cleaned output",
+                            c
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

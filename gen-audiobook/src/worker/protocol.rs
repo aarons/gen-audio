@@ -171,8 +171,8 @@ pub struct WorkerStatus {
     pub ready: bool,
     /// Device being used (cuda, mps, cpu).
     pub device: String,
-    /// Version of gena installed on worker.
-    pub gena_version: String,
+    /// Version of gen-audio installed on worker.
+    pub gen_audio_version: String,
     /// Whether Chatterbox TTS is installed and working.
     pub chatterbox_installed: bool,
     /// Number of jobs currently being processed.
@@ -187,7 +187,7 @@ impl WorkerStatus {
         Self {
             ready: true,
             device: device.into(),
-            gena_version: env!("CARGO_PKG_VERSION").to_string(),
+            gen_audio_version: env!("CARGO_PKG_VERSION").to_string(),
             chatterbox_installed: true,
             jobs_in_progress: 0,
             available_disk_mb,
@@ -199,7 +199,7 @@ impl WorkerStatus {
         Self {
             ready: false,
             device: "unknown".to_string(),
-            gena_version: env!("CARGO_PKG_VERSION").to_string(),
+            gen_audio_version: env!("CARGO_PKG_VERSION").to_string(),
             chatterbox_installed: false,
             jobs_in_progress: 0,
             available_disk_mb: 0,

@@ -1,4 +1,4 @@
-//! gena configuration management for Chatterbox TTS.
+//! gen-audio configuration management for Chatterbox TTS.
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ const DEFAULT_CFG: f32 = 0.5;
 const DEFAULT_TEMPERATURE: f32 = 0.8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenaConfig {
+pub struct GenAudioConfig {
     /// Default voice reference audio path for cloning
     #[serde(default)]
     pub voice_ref: Option<PathBuf>,
@@ -53,7 +53,7 @@ fn default_chunk_size() -> usize {
     280
 }
 
-impl Default for GenaConfig {
+impl Default for GenAudioConfig {
     fn default() -> Self {
         Self {
             voice_ref: None,
@@ -66,14 +66,14 @@ impl Default for GenaConfig {
     }
 }
 
-impl GenaConfig {
-    /// Get the config file path: ~/.config/cli-programs/gena.toml
+impl GenAudioConfig {
+    /// Get the config file path: ~/.config/cli-programs/gen-audio.toml
     pub fn config_path() -> Result<PathBuf> {
         let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))?;
         Ok(PathBuf::from(home)
             .join(".config")
             .join("cli-programs")
-            .join("gena.toml"))
+            .join("gen-audio.toml"))
     }
 
     /// Load config from file, returning default if file doesn't exist
@@ -85,7 +85,7 @@ impl GenaConfig {
         }
 
         let content = fs::read_to_string(&path)?;
-        let config: GenaConfig = toml::from_str(&content)?;
+        let config: GenAudioConfig = toml::from_str(&content)?;
         Ok(config)
     }
 
@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_default_config() {
-        let config = GenaConfig::default();
+        let config = GenAudioConfig::default();
         assert_eq!(config.exaggeration, 0.5);
         assert_eq!(config.cfg, 0.5);
         assert_eq!(config.temperature, 0.8);
@@ -119,10 +119,10 @@ mod tests {
 
     #[test]
     fn test_config_path() {
-        let path = GenaConfig::config_path();
+        let path = GenAudioConfig::config_path();
         assert!(path.is_ok());
         let path = path.unwrap();
-        assert!(path.ends_with("cli-programs/gena.toml"));
+        assert!(path.ends_with("cli-programs/gen-audio.toml"));
     }
 
     #[test]
@@ -134,7 +134,7 @@ exaggeration = 0.7
 cfg = 0.3
 temperature = 1.0
 "#;
-        let config: GenaConfig = toml::from_str(toml_str).unwrap();
+        let config: GenAudioConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.voice_ref, Some(PathBuf::from("/path/to/voice.wav")));
         assert_eq!(config.device, Some("mps".to_string()));
         assert_eq!(config.exaggeration, 0.7);
@@ -145,7 +145,7 @@ temperature = 1.0
     #[test]
     fn test_parse_empty_config() {
         let toml_str = "";
-        let config: GenaConfig = toml::from_str(toml_str).unwrap();
+        let config: GenAudioConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.exaggeration, 0.5);
         assert_eq!(config.cfg, 0.5);
         assert_eq!(config.temperature, 0.8);

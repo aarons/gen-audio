@@ -121,8 +121,8 @@ fn confirm_bootstrap() -> Result<bool> {
     eprintln!("  - FFmpeg {} (~30 MB)", FFMPEG_VERSION);
     eprintln!("  - Chatterbox TTS + PyTorch (~2 GB)");
     eprintln!();
-    eprintln!("All files will be stored in ~/.local/share/gena/");
-    eprintln!("Run 'gena uninstall' to remove everything.");
+    eprintln!("All files will be stored in ~/.local/share/gen-audio/");
+    eprintln!("Run 'gen-audio uninstall' to remove everything.");
     eprintln!();
     eprint!("Continue? [Y/n] ");
     io::stderr().flush()?;
@@ -194,13 +194,13 @@ pub fn clean_all(include_models: bool) -> Result<CleanupStats> {
 
     // Calculate sizes before deletion
     if data_dir.exists() {
-        stats.gena_size = dir_size(&data_dir).unwrap_or(0);
+        stats.gen_audio_size = dir_size(&data_dir).unwrap_or(0);
     }
 
-    // Remove gena data directory
+    // Remove gen-audio data directory
     if data_dir.exists() {
-        std::fs::remove_dir_all(&data_dir).context("Failed to remove gena data directory")?;
-        stats.gena_removed = true;
+        std::fs::remove_dir_all(&data_dir).context("Failed to remove gen-audio data directory")?;
+        stats.gen_audio_removed = true;
     }
 
     // Optionally remove HuggingFace model cache for Chatterbox
@@ -231,15 +231,15 @@ pub fn clean_all(include_models: bool) -> Result<CleanupStats> {
 /// Statistics about cleanup operation.
 #[derive(Default)]
 pub struct CleanupStats {
-    pub gena_removed: bool,
-    pub gena_size: u64,
+    pub gen_audio_removed: bool,
+    pub gen_audio_size: u64,
     pub models_removed: bool,
     pub models_size: u64,
 }
 
 impl CleanupStats {
     pub fn total_size(&self) -> u64 {
-        self.gena_size + self.models_size
+        self.gen_audio_size + self.models_size
     }
 }
 

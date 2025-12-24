@@ -15,6 +15,29 @@ use std::sync::Once;
 /// Initialize Python runtime once.
 static PYTHON_INIT: Once = Once::new();
 
+/// Get the Python home directory relative to the executable.
+/// Required because python-build-standalone has /install baked in as prefix.
+fn get_python_home() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+
+    // Try multiple possible locations relative to executable:
+    // - target/release/gen-audiobook -> ../python-dev/python
+    // - target/debug/gen-audiobook -> ../python-dev/python
+    // - target/debug/deps/gen_audiobook-xxx -> ../../python-dev/python (tests)
+    let candidates = [
+        exe_dir.join("..").join("python-dev").join("python"),
+        exe_dir.join("..").join("..").join("python-dev").join("python"),
+    ];
+
+    for candidate in candidates {
+        if candidate.join("lib").join("python3.11").exists() {
+            return candidate.canonicalize().ok();
+        }
+    }
+    None
+}
+
 /// Chatterbox TTS backend using PyO3.
 pub struct ChatterboxBackend {
     /// Device to use (mps, cuda, cpu)
@@ -35,27 +58,51 @@ impl ChatterboxBackend {
         // Check if venv is ready
         if !setup::is_venv_ready()? {
             anyhow::bail!(
-                "Python virtual environment not ready. Please run 'gena setup' first."
+                "Python virtual environment not ready. Please run 'gen-audio setup' first."
             );
         }
 
         if !setup::is_chatterbox_installed()? {
             anyhow::bail!(
-                "Chatterbox not installed. Please run 'gena setup' first."
+                "Chatterbox not installed. Please run 'gen-audio setup' first."
             );
         }
 
         // Initialize Python once
         PYTHON_INIT.call_once(|| {
-            // Set PYO3_PYTHON to the venv Python
-            if let Ok(python_path) = setup::get_python_path() {
-                // SAFETY: This is called during single-threaded initialization
-                // before any other threads are spawned.
+            // SAFETY: This is called during single-threaded initialization
+            // before any other threads are spawned.
+
+            // Set PYTHONHOME to override /install prefix baked into libpython
+            if let Some(python_home) = get_python_home() {
                 unsafe {
-                    std::env::set_var("PYO3_PYTHON", python_path);
+                    std::env::set_var("PYTHONHOME", &python_home);
                 }
             }
+
+            // Get venv path for later use
+            let venv_site_packages = setup::get_python_path().ok().and_then(|python_path| {
+                // venv Python: .../venv/bin/python -> site-packages: .../venv/lib/python3.11/site-packages
+                let venv_dir = python_path.parent()?.parent()?;
+                let site_packages = venv_dir.join("lib").join("python3.11").join("site-packages");
+                if site_packages.exists() {
+                    Some(site_packages)
+                } else {
+                    None
+                }
+            });
+
             pyo3::prepare_freethreaded_python();
+
+            // Add venv site-packages to sys.path after Python initializes
+            if let Some(site_packages) = venv_site_packages {
+                let _ = Python::with_gil(|py| -> PyResult<()> {
+                    let sys = py.import("sys")?;
+                    let path = sys.getattr("path")?;
+                    path.call_method1("insert", (0, site_packages.to_string_lossy().as_ref()))?;
+                    Ok(())
+                });
+            }
         });
 
         // Auto-detect device if not specified

@@ -9,11 +9,11 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read};
 use std::path::{Path, PathBuf};
 
-/// Get the base data directory for gena.
+/// Get the base data directory for gen-audio.
 fn get_data_dir() -> Result<PathBuf> {
     let data_dir = dirs::data_local_dir()
         .or_else(dirs::home_dir)
-        .map(|d| d.join("gena"))
+        .map(|d| d.join("gen-audio"))
         .ok_or_else(|| anyhow::anyhow!("Could not determine data directory"))?;
 
     Ok(data_dir)

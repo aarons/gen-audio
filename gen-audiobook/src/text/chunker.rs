@@ -114,7 +114,16 @@ fn split_long_sentence(sentence: &str, max_length: usize, depth: usize) -> Vec<S
     // Try splitting on word boundaries
     let word_split = split_on_words(sentence, max_length);
     if word_split.len() > 1 {
-        return word_split;
+        // Recursively split any still-long chunks (single words longer than max_length)
+        let mut final_chunks = Vec::new();
+        for chunk in word_split {
+            if chunk.len() > max_length {
+                final_chunks.extend(hard_split(&chunk, max_length));
+            } else if !chunk.is_empty() {
+                final_chunks.push(chunk);
+            }
+        }
+        return final_chunks;
     }
 
     // Last resort: hard split
@@ -186,17 +195,26 @@ fn split_on_words(text: &str, max_length: usize) -> Vec<String> {
     chunks
 }
 
-/// Hard split text at exact positions (last resort).
+/// Hard split text at character boundaries, respecting byte length limits.
+///
+/// Splits on character boundaries (never breaking UTF-8 sequences) but ensures
+/// each chunk is at most `max_length` bytes to be consistent with the rest of
+/// the chunking code.
 fn hard_split(text: &str, max_length: usize) -> Vec<String> {
     let mut chunks = Vec::new();
-    let mut start = 0;
-    let chars: Vec<char> = text.chars().collect();
+    let mut current = String::new();
 
-    while start < chars.len() {
-        let end = std::cmp::min(start + max_length, chars.len());
-        let chunk: String = chars[start..end].iter().collect();
-        chunks.push(chunk);
-        start = end;
+    for c in text.chars() {
+        // Check if adding this char would exceed max_length bytes
+        if current.len() + c.len_utf8() > max_length && !current.is_empty() {
+            chunks.push(current);
+            current = String::new();
+        }
+        current.push(c);
+    }
+
+    if !current.is_empty() {
+        chunks.push(current);
     }
 
     chunks
@@ -304,114 +322,141 @@ mod tests {
         assert_eq!(parts, vec!["one two", "three four", "five"]);
     }
 
-    // ==================== Chunk Uniqueness Tests ====================
+    // ==================== Edge Case Tests ====================
 
     #[test]
-    fn test_chunks_cover_all_sentences() {
-        // Verify all input sentences appear in output chunks
-        let text = "First sentence. Second sentence. Third sentence.";
-        let chunks = chunk_text(text, 30, 50);
-        let rejoined = chunks.join(" ");
+    fn test_long_word_no_delimiters() {
+        // A very long word with no spaces or delimiters should hard-split
+        let long_word = "a".repeat(500);
+        let chunks = chunk_text(&long_word, 100, 150);
 
-        // All sentences should be present (normalized form)
-        assert!(
-            rejoined.contains("First sentence"),
-            "Missing 'First sentence' in chunks: {:?}",
-            chunks
-        );
-        assert!(
-            rejoined.contains("Second sentence"),
-            "Missing 'Second sentence' in chunks: {:?}",
-            chunks
-        );
-        assert!(
-            rejoined.contains("Third sentence"),
-            "Missing 'Third sentence' in chunks: {:?}",
-            chunks
-        );
-    }
+        // Should produce multiple chunks
+        assert!(chunks.len() > 1, "Should split long word into multiple chunks");
 
-    #[test]
-    fn test_chunks_no_duplicate_sentences() {
-        // Verify no sentence appears in multiple chunks
-        let text = "Alpha. Beta. Gamma. Delta. Epsilon.";
-        let chunks = chunk_text(text, 15, 30);
-
-        // Use unique words to verify no duplicates
-        let unique_words = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"];
-
-        for word in unique_words {
-            let count: usize = chunks.iter().filter(|c| c.contains(word)).count();
-            assert_eq!(
-                count, 1,
-                "Word '{}' appears in {} chunks (expected 1): {:?}",
-                word, count, chunks
-            );
-        }
-    }
-
-    #[test]
-    fn test_chunks_preserve_sentence_boundaries() {
-        // Verify sentences aren't split mid-word across chunks
-        let text = "The quick brown fox. Jumps over the lazy dog.";
-        let chunks = chunk_text(text, 25, 50);
-
-        // Words should be complete in each chunk
+        // All chunks should be within max_size
         for chunk in &chunks {
-            // No chunk should start or end with a partial word (indicated by space issues)
-            let trimmed = chunk.trim();
             assert!(
-                !trimmed.starts_with(' '),
-                "Chunk starts with space: '{}'",
-                chunk
-            );
-            assert!(
-                !trimmed.ends_with(' '),
-                "Chunk ends with space: '{}'",
-                chunk
+                chunk.len() <= 150,
+                "Chunk exceeds max_size: {} chars",
+                chunk.len()
             );
         }
+
+        // Total content preserved
+        let total_len: usize = chunks.iter().map(|c| c.len()).sum();
+        assert_eq!(total_len, 500, "Content should be preserved");
     }
 
     #[test]
-    fn test_chunks_total_content_matches() {
-        // Verify the total character count roughly matches (allowing for whitespace normalization)
-        let text = "One. Two. Three. Four. Five. Six. Seven. Eight. Nine. Ten.";
-        let chunks = chunk_text(text, 20, 40);
+    fn test_consecutive_delimiters() {
+        // Text with many consecutive delimiters
+        let text = "a;;;b:::c,,,d - - - e";
+        let chunks = chunk_text(text, 10, 20);
 
-        // Count alphanumeric characters in original
-        let orig_alphanum: usize = text.chars().filter(|c| c.is_alphanumeric()).count();
-
-        // Count alphanumeric characters in chunks
-        let chunks_alphanum: usize = chunks
-            .iter()
-            .flat_map(|c| c.chars())
-            .filter(|c| c.is_alphanumeric())
-            .count();
-
-        assert_eq!(
-            orig_alphanum, chunks_alphanum,
-            "Alphanumeric count mismatch: original {} vs chunks {}",
-            orig_alphanum, chunks_alphanum
-        );
+        // Content should be preserved (delimiters may be normalized)
+        let rejoined = chunks.join(" ");
+        assert!(rejoined.contains('a'), "Missing 'a'");
+        assert!(rejoined.contains('b'), "Missing 'b'");
+        assert!(rejoined.contains('c'), "Missing 'c'");
+        assert!(rejoined.contains('d'), "Missing 'd'");
+        assert!(rejoined.contains('e'), "Missing 'e'");
     }
 
     #[test]
-    fn test_chunks_no_overlap_with_long_text() {
-        // Test with longer text to catch edge cases
-        let text = "Sentence one here. Sentence two here. Sentence three here. \
-                    Sentence four here. Sentence five here. Sentence six here. \
-                    Sentence seven here. Sentence eight here. Sentence nine here.";
-        let chunks = chunk_text(text, 50, 80);
+    fn test_exact_boundary_conditions() {
+        // Text exactly at target_size
+        let text = "a".repeat(280); // Exactly DEFAULT_TARGET_SIZE
+        let chunks = chunk_text(&text, 280, 350);
+        assert_eq!(chunks.len(), 1, "Should fit in one chunk");
+        assert_eq!(chunks[0].len(), 280);
 
-        // Verify unique numbered words appear exactly once across all chunks
-        for num in ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"] {
-            let occurrences: usize = chunks.iter().map(|c| c.matches(num).count()).sum();
-            assert_eq!(
-                occurrences, 1,
-                "Word '{}' appears {} times in chunks (expected 1): {:?}",
-                num, occurrences, chunks
+        // Text exactly at max_size
+        let text = "a".repeat(350);
+        let chunks = chunk_text(&text, 280, 350);
+        assert_eq!(chunks.len(), 1, "Should fit in one chunk at max_size");
+    }
+
+    #[test]
+    fn test_realistic_book_content() {
+        // Realistic content with dialog, abbreviations, em-dashes, ellipsis
+        let text = r#""Good morning, Dr. Watson," said Holmes. "I see you've been to the U.S. recently—your tan gives you away." He paused… then continued, "The game is afoot!""#;
+
+        let chunks = chunk_text(text, 100, 150);
+
+        // Should produce reasonable chunks
+        assert!(!chunks.is_empty(), "Should produce chunks");
+
+        // All chunks within bounds
+        for chunk in &chunks {
+            assert!(
+                chunk.len() <= 150,
+                "Chunk exceeds max_size: {} chars",
+                chunk.len()
             );
+        }
+
+        // Key content preserved (allowing for Unicode normalization)
+        let rejoined = chunks.join(" ");
+        assert!(rejoined.contains("Dr"), "Should preserve 'Dr'");
+        assert!(rejoined.contains("Watson"), "Should preserve 'Watson'");
+        assert!(rejoined.contains("Holmes"), "Should preserve 'Holmes'");
+        assert!(rejoined.contains("U.S"), "Should preserve 'U.S'");
+        assert!(rejoined.contains("afoot"), "Should preserve 'afoot'");
+
+        // Problematic Unicode should be cleaned
+        assert!(!rejoined.contains('\u{2014}'), "Em-dash should be normalized");
+        assert!(!rejoined.contains('\u{2026}'), "Ellipsis should be normalized");
+    }
+
+    // ==================== Property Tests ====================
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn prop_no_data_loss(s in "\\PC{0,1000}") {
+                let chunks = chunk_text(&s, 100, 150);
+
+                // Count alphanumeric chars in input
+                let input_alphanum: usize = s.chars().filter(|c| c.is_alphanumeric()).count();
+
+                // Count alphanumeric chars in output
+                let output_alphanum: usize = chunks
+                    .iter()
+                    .flat_map(|c| c.chars())
+                    .filter(|c| c.is_alphanumeric())
+                    .count();
+
+                prop_assert_eq!(
+                    input_alphanum,
+                    output_alphanum,
+                    "Alphanumeric content should be preserved"
+                );
+            }
+
+            #[test]
+            fn prop_chunks_within_bounds(s in "\\PC{1,500}") {
+                let max_size = 150;
+                let chunks = chunk_text(&s, 100, max_size);
+
+                for chunk in &chunks {
+                    prop_assert!(
+                        chunk.len() <= max_size,
+                        "Chunk {} chars exceeds max_size {}",
+                        chunk.len(),
+                        max_size
+                    );
+                }
+            }
+
+            #[test]
+            fn prop_non_empty_input_produces_output(s in "[a-zA-Z]{1,100}") {
+                // Input with at least one letter should produce non-empty output
+                let chunks = chunk_text(&s, 50, 100);
+                prop_assert!(!chunks.is_empty(), "Non-empty alphanumeric input should produce output");
+            }
         }
     }
 }

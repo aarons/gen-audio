@@ -4,6 +4,10 @@ version = "0.2.0"
 edition = "2024"
 description = "Convert EPUB files to audio using text-to-speech"
 
+[[bin]]
+name = "gen-audio"
+path = "src/main.rs"
+
 [dependencies]
 clap = { workspace = true }
 anyhow = { workspace = true }
@@ -32,3 +36,6 @@ thiserror = "2.0"
 
 # Text processing
 seams = "0.1"
+
+[dev-dependencies]
+proptest = "1.4"

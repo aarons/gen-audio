@@ -7,13 +7,13 @@
 //!
 //! ```bash
 //! # Check worker status
-//! gena worker status
+//! gen-audio worker status
 //!
 //! # Execute a job (coordinator sends job via SSH)
-//! ssh worker "gena worker run" < job.json
+//! ssh worker "gen-audio worker run" < job.json
 //!
 //! # Self-install on a new machine
-//! gena worker install
+//! gen-audio worker install
 //! ```
 
 pub mod executor;
@@ -36,7 +36,7 @@ pub enum WorkerCommand {
     /// Execute a single job from stdin, output result to stdout.
     Run,
 
-    /// Self-install gena on this machine (download dependencies).
+    /// Self-install gen-audio on this machine (download dependencies).
     Install {
         /// Force reinstall even if already installed.
         #[arg(long)]
@@ -80,7 +80,7 @@ pub async fn handle_worker_command(cmd: &WorkerCommand) -> Result<()> {
 async fn handle_install(force: bool) -> Result<()> {
     use crate::bootstrap;
 
-    println!("Installing gena worker dependencies...");
+    println!("Installing gen-audio worker dependencies...");
 
     // Check current status
     let status = bootstrap::check_status()?;

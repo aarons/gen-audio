@@ -8,16 +8,16 @@
   - Portable Python 3.11 from python-build-standalone
   - Static FFmpeg/FFprobe binaries
   - Chatterbox TTS with PyTorch
-- `gena uninstall` command to cleanly remove all dependencies
+- `gen-audio uninstall` command to cleanly remove all dependencies
   - `--include-models` flag to also remove HuggingFace model cache
-- `gena setup --clean` to remove and re-download dependencies
+- `gen-audio setup --clean` to remove and re-download dependencies
 - Progress bars during dependency downloads
 - Platform detection for macOS (arm64, x86_64) and Linux (x86_64, arm64)
 
 ### Changed
 
 - No longer requires system Python or FFmpeg installation
-- All gena-managed dependencies now stored in `~/.local/share/gena/`
+- All gen-audio-managed dependencies now stored in `~/.local/share/gen-audio/`
 - Improved first-run user experience with confirmation prompt
 
 ### Fixed
