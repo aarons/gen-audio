@@ -3,6 +3,8 @@ PYTHON_LIB = target/python-dev/python/lib/libpython3.11.dylib
 .PHONY: build setup clean
 
 build: setup
+	@# Force recompile to ensure source changes are picked up
+	cargo clean -p gen-audiobook --release 2>/dev/null || true
 	cargo xtask build --release
 	cp target/release/gen-audiobook gen-audio
 	@# Add rpath for running from project root

@@ -12,6 +12,32 @@ use pyo3::types::PyDict;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
+/// Execute Python code with stdout/stderr suppressed.
+///
+/// Python libraries (torch, chatterbox) emit various output during initialization
+/// and model loading that would otherwise leak to the terminal.
+fn with_suppressed_output<F, T>(py: Python<'_>, f: F) -> Result<T>
+where
+    F: FnOnce(Python<'_>) -> Result<T>,
+{
+    let io = py.import("io")?;
+    let sys = py.import("sys")?;
+
+    let old_stdout = sys.getattr("stdout")?;
+    let old_stderr = sys.getattr("stderr")?;
+
+    let devnull = io.getattr("StringIO")?.call0()?;
+    sys.setattr("stdout", &devnull)?;
+    sys.setattr("stderr", &devnull)?;
+
+    let result = f(py);
+
+    sys.setattr("stdout", old_stdout)?;
+    sys.setattr("stderr", old_stderr)?;
+
+    result
+}
+
 /// Initialize Python runtime once.
 static PYTHON_INIT: Once = Once::new();
 
@@ -64,11 +90,13 @@ impl ChatterboxBackend {
 
             // Add venv site-packages to sys.path after Python initializes
             if let Some(site_packages) = venv_site_packages {
-                let _ = Python::with_gil(|py| -> PyResult<()> {
-                    let sys = py.import("sys")?;
-                    let path = sys.getattr("path")?;
-                    path.call_method1("insert", (0, site_packages.to_string_lossy().as_ref()))?;
-                    Ok(())
+                let _ = Python::with_gil(|py| {
+                    with_suppressed_output(py, |py| {
+                        let sys = py.import("sys")?;
+                        let path = sys.getattr("path")?;
+                        path.call_method1("insert", (0, site_packages.to_string_lossy().as_ref()))?;
+                        Ok(())
+                    })
                 });
             }
         });
@@ -89,24 +117,26 @@ impl ChatterboxBackend {
     /// Auto-detect the best available device.
     fn detect_device() -> Result<String> {
         Python::with_gil(|py| {
-            // Import torch
-            let torch = py.import("torch").context("Failed to import torch")?;
+            with_suppressed_output(py, |py| {
+                // Import torch
+                let torch = py.import("torch").context("Failed to import torch")?;
 
-            // Check MPS (Apple Silicon)
-            let backends = torch.getattr("backends")?;
-            let mps = backends.getattr("mps")?;
-            if mps.call_method0("is_available")?.extract::<bool>()? {
-                return Ok("mps".to_string());
-            }
+                // Check MPS (Apple Silicon)
+                let backends = torch.getattr("backends")?;
+                let mps = backends.getattr("mps")?;
+                if mps.call_method0("is_available")?.extract::<bool>()? {
+                    return Ok("mps".to_string());
+                }
 
-            // Check CUDA
-            let cuda = torch.getattr("cuda")?;
-            if cuda.call_method0("is_available")?.extract::<bool>()? {
-                return Ok("cuda".to_string());
-            }
+                // Check CUDA
+                let cuda = torch.getattr("cuda")?;
+                if cuda.call_method0("is_available")?.extract::<bool>()? {
+                    return Ok("cuda".to_string());
+                }
 
-            // Default to CPU
-            Ok("cpu".to_string())
+                // Default to CPU
+                Ok("cpu".to_string())
+            })
         })
     }
 
@@ -118,76 +148,78 @@ impl ChatterboxBackend {
         options: &TtsOptions,
     ) -> Result<()> {
         Python::with_gil(|py| {
-            // Enable MPS fallback
-            let os = py.import("os")?;
-            let environ = os.getattr("environ")?;
-            environ.set_item("PYTORCH_ENABLE_MPS_FALLBACK", "1")?;
+            with_suppressed_output(py, |py| {
+                // Enable MPS fallback
+                let os = py.import("os")?;
+                let environ = os.getattr("environ")?;
+                environ.set_item("PYTORCH_ENABLE_MPS_FALLBACK", "1")?;
 
-            // Import chatterbox
-            let chatterbox_tts = py.import("chatterbox.tts")?;
-            let chatterbox_class = chatterbox_tts.getattr("ChatterboxTTS")?;
+                // Import chatterbox
+                let chatterbox_tts = py.import("chatterbox.tts")?;
+                let chatterbox_class = chatterbox_tts.getattr("ChatterboxTTS")?;
 
-            // Load model
-            let kwargs = PyDict::new(py);
-            kwargs.set_item("device", &self.device)?;
-            let model = chatterbox_class.call_method("from_pretrained", (), Some(&kwargs))?;
+                // Load model
+                let kwargs = PyDict::new(py);
+                kwargs.set_item("device", &self.device)?;
+                let model = chatterbox_class.call_method("from_pretrained", (), Some(&kwargs))?;
 
-            // Prepare generation kwargs
-            let gen_kwargs = PyDict::new(py);
-            gen_kwargs.set_item("text", text)?;
+                // Prepare generation kwargs
+                let gen_kwargs = PyDict::new(py);
+                gen_kwargs.set_item("text", text)?;
 
-            // Voice reference for cloning
-            let voice_path = options
-                .voice_ref
-                .as_ref()
-                .or(self.voice_ref.as_ref());
-            if let Some(voice) = voice_path {
-                gen_kwargs.set_item("audio_prompt_path", voice.to_string_lossy().as_ref())?;
-            }
+                // Voice reference for cloning
+                let voice_path = options
+                    .voice_ref
+                    .as_ref()
+                    .or(self.voice_ref.as_ref());
+                if let Some(voice) = voice_path {
+                    gen_kwargs.set_item("audio_prompt_path", voice.to_string_lossy().as_ref())?;
+                }
 
-            // TTS parameters
-            gen_kwargs.set_item("exaggeration", options.exaggeration)?;
-            gen_kwargs.set_item("cfg_weight", options.cfg)?;
-            gen_kwargs.set_item("temperature", options.temperature)?;
+                // TTS parameters
+                gen_kwargs.set_item("exaggeration", options.exaggeration)?;
+                gen_kwargs.set_item("cfg_weight", options.cfg)?;
+                gen_kwargs.set_item("temperature", options.temperature)?;
 
-            // Generate audio
-            let wav = model.call_method("generate", (), Some(&gen_kwargs))?;
+                // Generate audio
+                let wav = model.call_method("generate", (), Some(&gen_kwargs))?;
 
-            // Get sample rate from model
-            let sample_rate: u32 = model.getattr("sr")?.extract()?;
+                // Get sample rate from model
+                let sample_rate: u32 = model.getattr("sr")?.extract()?;
 
-            // Save audio using soundfile
-            let soundfile = py.import("soundfile")?;
+                // Save audio using soundfile
+                let soundfile = py.import("soundfile")?;
 
-            // Convert tensor to numpy
-            let wav_cpu = wav.call_method0("cpu")?;
-            let wav_np = wav_cpu.call_method0("numpy")?;
+                // Convert tensor to numpy
+                let wav_cpu = wav.call_method0("cpu")?;
+                let wav_np = wav_cpu.call_method0("numpy")?;
 
-            // Handle dimensions - soundfile expects (samples, channels)
-            let ndim: i32 = wav_np.getattr("ndim")?.extract()?;
-            let wav_np = if ndim == 2 {
-                wav_np.getattr("T")?
-            } else {
-                wav_np
-            };
+                // Handle dimensions - soundfile expects (samples, channels)
+                let ndim: i32 = wav_np.getattr("ndim")?.extract()?;
+                let wav_np = if ndim == 2 {
+                    wav_np.getattr("T")?
+                } else {
+                    wav_np
+                };
 
-            // Ensure output directory exists
-            if let Some(parent) = output_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
+                // Ensure output directory exists
+                if let Some(parent) = output_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
 
-            // Save to file
-            let write_kwargs = PyDict::new(py);
-            soundfile.call_method(
-                "write",
-                (output_path.to_string_lossy().as_ref(), wav_np, sample_rate),
-                Some(&write_kwargs),
-            )?;
+                // Save to file
+                let write_kwargs = PyDict::new(py);
+                soundfile.call_method(
+                    "write",
+                    (output_path.to_string_lossy().as_ref(), wav_np, sample_rate),
+                    Some(&write_kwargs),
+                )?;
 
-            // Cleanup memory
-            self.cleanup_memory(py)?;
+                // Cleanup memory
+                self.cleanup_memory(py)?;
 
-            Ok(())
+                Ok(())
+            })
         })
     }
 
