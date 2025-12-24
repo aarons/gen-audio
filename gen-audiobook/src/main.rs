@@ -13,6 +13,7 @@ mod worker;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use std::os::unix::process::CommandExt;
 use config::GenAudioConfig;
 use indicatif::{ProgressBar, ProgressStyle};
 use session::Session;
@@ -140,8 +141,58 @@ enum ConfigAction {
     },
 }
 
+/// Ensure PYTHONHOME is set before Python initializes.
+/// If not set, re-exec ourselves with the correct value.
+///
+/// This is needed because python-build-standalone has `/install` baked in
+/// as the prefix. By the time Rust code runs, dyld has already loaded
+/// libpython and its initialization fails. Re-exec ensures PYTHONHOME
+/// is set before the library loads.
+fn ensure_python_home() {
+    if std::env::var("PYTHONHOME").is_ok() {
+        return; // Already set
+    }
+
+    if let Some(python_home) = find_python_home() {
+        let exe = std::env::current_exe().expect("Failed to get current exe");
+        let args: Vec<_> = std::env::args().collect();
+
+        let err = std::process::Command::new(&exe)
+            .args(&args[1..])
+            .env("PYTHONHOME", &python_home)
+            .exec();
+
+        eprintln!("Warning: Failed to re-exec with PYTHONHOME: {}", err);
+    }
+}
+
+/// Find the Python home directory relative to the executable.
+fn find_python_home() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+
+    // Try multiple possible locations relative to executable:
+    // - ./gen-audio (project root) -> target/python-dev/python
+    // - target/release/gen-audiobook -> ../python-dev/python
+    // - target/debug/deps/gen_audiobook-xxx -> ../../python-dev/python (tests)
+    let candidates = [
+        exe_dir.join("target").join("python-dev").join("python"),
+        exe_dir.join("..").join("python-dev").join("python"),
+        exe_dir.join("..").join("..").join("python-dev").join("python"),
+    ];
+
+    for candidate in candidates {
+        if candidate.join("lib").join("python3.11").exists() {
+            return candidate.canonicalize().ok();
+        }
+    }
+    None
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    ensure_python_home();
+
     let args = Args::parse();
 
     // Handle subcommands that don't need bootstrap

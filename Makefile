@@ -5,6 +5,8 @@ PYTHON_LIB = target/python-dev/python/lib/libpython3.11.dylib
 build: setup
 	cargo xtask build --release
 	cp target/release/gen-audiobook gen-audio
+	@# Add rpath for running from project root
+	install_name_tool -add_rpath @executable_path/target/python-dev/python/lib gen-audio 2>/dev/null || true
 
 setup: $(PYTHON_LIB)
 	@# Fix install_name if not already fixed

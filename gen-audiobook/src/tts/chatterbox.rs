@@ -15,29 +15,6 @@ use std::sync::Once;
 /// Initialize Python runtime once.
 static PYTHON_INIT: Once = Once::new();
 
-/// Get the Python home directory relative to the executable.
-/// Required because python-build-standalone has /install baked in as prefix.
-fn get_python_home() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let exe_dir = exe.parent()?;
-
-    // Try multiple possible locations relative to executable:
-    // - target/release/gen-audiobook -> ../python-dev/python
-    // - target/debug/gen-audiobook -> ../python-dev/python
-    // - target/debug/deps/gen_audiobook-xxx -> ../../python-dev/python (tests)
-    let candidates = [
-        exe_dir.join("..").join("python-dev").join("python"),
-        exe_dir.join("..").join("..").join("python-dev").join("python"),
-    ];
-
-    for candidate in candidates {
-        if candidate.join("lib").join("python3.11").exists() {
-            return candidate.canonicalize().ok();
-        }
-    }
-    None
-}
-
 /// Chatterbox TTS backend using PyO3.
 pub struct ChatterboxBackend {
     /// Device to use (mps, cuda, cpu)
@@ -69,17 +46,8 @@ impl ChatterboxBackend {
         }
 
         // Initialize Python once
+        // Note: PYTHONHOME is set by ensure_python_home() in main.rs via re-exec
         PYTHON_INIT.call_once(|| {
-            // SAFETY: This is called during single-threaded initialization
-            // before any other threads are spawned.
-
-            // Set PYTHONHOME to override /install prefix baked into libpython
-            if let Some(python_home) = get_python_home() {
-                unsafe {
-                    std::env::set_var("PYTHONHOME", &python_home);
-                }
-            }
-
             // Get venv path for later use
             let venv_site_packages = setup::get_python_path().ok().and_then(|python_path| {
                 // venv Python: .../venv/bin/python -> site-packages: .../venv/lib/python3.11/site-packages

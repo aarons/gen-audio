@@ -2,7 +2,13 @@
 xtask = "run --package xtask --"
 
 [target.aarch64-apple-darwin]
-rustflags = ["-C", "link-arg=-Wl,-rpath,@executable_path/../python-dev/python/lib"]
+rustflags = [
+    "-C", "link-arg=-Wl,-rpath,@executable_path/../python-dev/python/lib",
+    "-C", "link-arg=-Wl,-rpath,@executable_path/target/python-dev/python/lib",
+]
 
 [target.x86_64-apple-darwin]
-rustflags = ["-C", "link-arg=-Wl,-rpath,@executable_path/../python-dev/python/lib"]
+rustflags = [
+    "-C", "link-arg=-Wl,-rpath,@executable_path/../python-dev/python/lib",
+    "-C", "link-arg=-Wl,-rpath,@executable_path/target/python-dev/python/lib",
+]
