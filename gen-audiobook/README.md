@@ -130,7 +130,7 @@ ssh -p 2222 root@localhost "gen-audio-worker status"
 
 ### Worker Configuration
 
-Workers are stored in `~/.config/cli-programs/gen-audio-workers.toml`:
+Workers are stored in `workers.toml` in the current directory:
 
 ```toml
 [[workers]]

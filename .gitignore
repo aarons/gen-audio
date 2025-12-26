@@ -5,3 +5,4 @@
 /tmp/
 /logs/
 bookworm/assets/
+workers.toml

@@ -1,9 +1,9 @@
 //! Job scheduler for distributed TTS processing.
 
-use super::pool::WorkerPool;
+use super::pool::{execute_job_standalone, WorkerPool};
 use crate::worker::protocol::{JobStatus, TtsJob, TtsJobOptions, TtsResult};
 use anyhow::Result;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
@@ -150,12 +150,26 @@ impl JobScheduler {
 
             // Try to assign pending jobs to available workers
             while !self.pending.is_empty() {
-                let mut pool = self.pool.lock().await;
-                if let Some(worker) = pool.get_available_worker() {
+                // Calculate in-flight counts per worker
+                let in_flight_counts: HashMap<String, usize> = self
+                    .in_flight
+                    .iter()
+                    .fold(HashMap::new(), |mut acc, j| {
+                        *acc.entry(j.worker_name.clone()).or_insert(0) += 1;
+                        acc
+                    });
+
+                // Get worker config while holding lock briefly
+                let worker_info = {
+                    let mut pool = self.pool.lock().await;
+                    let job_timeout = pool.job_timeout();
+                    pool.get_available_worker_with_counts(&in_flight_counts)
+                        .map(|w| (w.name().to_string(), w.config.clone(), job_timeout))
+                };
+
+                if let Some((worker_name, worker_config, job_timeout)) = worker_info {
                     if let Some(job) = self.pending.pop_front() {
                         let job_id = job.job_id.clone();
-                        let worker_name = worker.name().to_string();
-                        let job_timeout = pool.job_timeout();
 
                         // Track in-flight job
                         self.in_flight.push(InFlightJob {
@@ -163,19 +177,11 @@ impl JobScheduler {
                             worker_name: worker_name.clone(),
                         });
 
-                        // Spawn job execution
+                        // Spawn job execution WITHOUT holding pool lock
                         let tx = tx.clone();
-                        let pool_clone = Arc::clone(&self.pool);
-
                         tokio::spawn(async move {
-                            let result = {
-                                let mut pool = pool_clone.lock().await;
-                                if let Some(worker) = pool.get_worker_mut(&worker_name) {
-                                    worker.submit_job(&job, job_timeout).await
-                                } else {
-                                    Err(anyhow::anyhow!("Worker not found"))
-                                }
-                            };
+                            // Execute job using standalone function (no lock needed)
+                            let result = execute_job_standalone(&worker_config, &job, job_timeout).await;
 
                             let result = match result {
                                 Ok(r) => r,
@@ -194,8 +200,17 @@ impl JobScheduler {
 
             // Retry failed jobs if workers are available
             while !self.failed.is_empty() {
+                let in_flight_counts: HashMap<String, usize> = self
+                    .in_flight
+                    .iter()
+                    .fold(HashMap::new(), |mut acc, j| {
+                        *acc.entry(j.worker_name.clone()).or_insert(0) += 1;
+                        acc
+                    });
+
                 let mut pool = self.pool.lock().await;
-                if pool.get_available_worker().is_some() {
+                if pool.get_available_worker_with_counts(&in_flight_counts).is_some() {
+                    drop(pool); // Release lock before modifying self
                     if let Some(job) = self.failed.pop() {
                         self.pending.push_front(job);
                     }

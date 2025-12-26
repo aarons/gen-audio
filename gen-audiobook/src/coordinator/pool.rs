@@ -95,40 +95,6 @@ impl Worker {
             .with_context(|| format!("Failed to upload voice reference to '{}'", self.name()))
     }
 
-    /// Submit a job to this worker.
-    pub async fn submit_job(&mut self, job: &TtsJob, job_timeout: u64) -> Result<TtsResult> {
-        let job_id = job.job_id.clone();
-
-        // Serialize job
-        let job_json = serde_json::to_string(job)
-            .context("Failed to serialize job")?;
-
-        // Track active job
-        self.active_jobs.insert(job_id.clone());
-
-        // Execute job
-        let result = self.execute_job(&job_json, job_timeout).await;
-
-        // Remove from active jobs
-        self.active_jobs.remove(&job_id);
-
-        result
-    }
-
-    /// Execute job and parse result.
-    async fn execute_job(&self, job_json: &str, timeout: u64) -> Result<TtsResult> {
-        // Create a connection with job timeout
-        let conn = SshConnection::new(self.config.clone(), timeout);
-
-        let output = conn.exec_with_input("gen-audio-worker run", job_json.as_bytes()).await
-            .with_context(|| format!("Job execution failed on worker '{}'", self.name()))?;
-
-        let result: TtsResult = serde_json::from_slice(&output)
-            .with_context(|| format!("Failed to parse job result from worker '{}'", self.name()))?;
-
-        Ok(result)
-    }
-
     /// Download result audio file.
     pub async fn download_audio(&self, remote_path: &str, local_path: &Path) -> Result<()> {
         self.connection.download(remote_path, local_path).await
@@ -138,6 +104,23 @@ impl Worker {
     pub async fn cleanup_audio(&self, remote_path: &str) -> Result<()> {
         self.connection.remove(remote_path).await
     }
+}
+
+/// Execute a job using worker config (no pool lock needed).
+///
+/// This allows jobs to run in parallel without holding the pool mutex.
+pub async fn execute_job_standalone(
+    config: &WorkerConfig,
+    job: &TtsJob,
+    timeout: u64,
+) -> Result<TtsResult> {
+    let conn = SshConnection::new(config.clone(), timeout);
+    let job_json = serde_json::to_string(job)
+        .context("Failed to serialize job")?;
+    let output = conn.exec_with_input("gen-audio-worker run", job_json.as_bytes()).await
+        .with_context(|| format!("Job execution failed on worker '{}'", config.name))?;
+    serde_json::from_slice(&output)
+        .with_context(|| format!("Failed to parse job result from worker '{}'", config.name))
 }
 
 /// Pool of workers for distributed processing.
@@ -218,6 +201,7 @@ impl WorkerPool {
     }
 
     /// Get an available worker (round-robin by priority).
+    #[allow(dead_code)]
     pub fn get_available_worker(&mut self) -> Option<&mut Worker> {
         // Sort by (priority, active_jobs) to prefer lower priority and less loaded workers
         self.workers.sort_by_key(|w| (w.config.priority, w.active_job_count()));
@@ -227,12 +211,37 @@ impl WorkerPool {
             .find(|w| w.can_accept_job(&self.defaults))
     }
 
+    /// Get an available worker using external in-flight counts.
+    ///
+    /// This is used by the scheduler to track jobs that are in-flight but haven't
+    /// yet called submit_job (which would update worker.active_jobs).
+    pub fn get_available_worker_with_counts(
+        &mut self,
+        in_flight_counts: &HashMap<String, usize>,
+    ) -> Option<&Worker> {
+        // Sort by (priority, in_flight_count) to prefer lower priority and less loaded workers
+        self.workers.sort_by_key(|w| {
+            let count = in_flight_counts.get(w.name()).copied().unwrap_or(0);
+            (w.config.priority, count)
+        });
+
+        self.workers.iter().find(|w| {
+            if !w.is_ready() {
+                return false;
+            }
+            let max = w.config.max_concurrent(&self.defaults) as usize;
+            let count = in_flight_counts.get(w.name()).copied().unwrap_or(0);
+            count < max
+        })
+    }
+
     /// Get a worker by name.
     pub fn get_worker(&self, name: &str) -> Option<&Worker> {
         self.workers.iter().find(|w| w.name() == name)
     }
 
     /// Get a mutable worker by name.
+    #[allow(dead_code)]
     pub fn get_worker_mut(&mut self, name: &str) -> Option<&mut Worker> {
         self.workers.iter_mut().find(|w| w.name() == name)
     }

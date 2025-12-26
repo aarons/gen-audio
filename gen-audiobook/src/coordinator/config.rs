@@ -64,11 +64,9 @@ impl WorkersConfig {
     }
 
     /// Get the configuration file path.
+    /// Uses `workers.toml` in the current directory.
     pub fn config_path() -> PathBuf {
-        dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("cli-programs")
-            .join("gen-audio-workers.toml")
+        PathBuf::from("workers.toml")
     }
 
     /// Get a worker by name.
