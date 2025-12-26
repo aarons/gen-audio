@@ -1,49 +1,30 @@
-//! Worker mode for distributed TTS processing.
+//! Worker types and utilities.
 //!
-//! This module provides the worker-side implementation for distributed audiobook
-//! generation. Workers receive jobs via stdin (over SSH) and return results via stdout.
-//!
-//! # Usage
-//!
-//! ```bash
-//! # Check worker status
-//! gen-audio worker status
-//!
-//! # Execute a job (coordinator sends job via SSH)
-//! ssh worker "gen-audio worker run" < job.json
-//!
-//! # Self-install on a new machine
-//! gen-audio worker install
-//! ```
+//! TTS execution is handled by Python workers running gen-audio-worker.
+//! This module provides:
+//! - Protocol types (TtsJob, TtsResult, WorkerStatus)
+//! - Path utilities for voice references and output files
 
 pub mod executor;
 pub mod protocol;
 
 pub use executor::{
-    execute_job_from_stdin,
     get_worker_status, output_dir, voices_dir,
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Subcommand;
 
 /// Worker subcommands.
+///
+/// Note: The Rust worker is deprecated. TTS is now handled by Python workers.
+/// Use `gen-audio workers` to manage remote workers.
 #[derive(Subcommand, Debug)]
 pub enum WorkerCommand {
-    /// Report worker status as JSON (for coordinator health checks).
+    /// Report local worker status (deprecated - use remote workers).
     Status,
 
-    /// Execute a single job from stdin, output result to stdout.
-    Run,
-
-    /// Self-install gen-audio on this machine (download dependencies).
-    Install {
-        /// Force reinstall even if already installed.
-        #[arg(long)]
-        force: bool,
-    },
-
-    /// Clean up worker data (output files, voice cache).
+    /// Clean up local worker data (output files, voice cache).
     Clean {
         /// Also remove voice reference cache.
         #[arg(long)]
@@ -55,19 +36,14 @@ pub enum WorkerCommand {
 pub async fn handle_worker_command(cmd: &WorkerCommand) -> Result<()> {
     match cmd {
         WorkerCommand::Status => {
+            eprintln!("Note: Local Rust worker is deprecated. TTS is now handled by Python workers.");
+            eprintln!("Use 'gen-audio workers status' to check remote workers.");
+            eprintln!();
+
             let status = get_worker_status();
-            let json = serde_json::to_string_pretty(&status)
-                .context("Failed to serialize status")?;
+            let json = serde_json::to_string_pretty(&status)?;
             println!("{}", json);
             Ok(())
-        }
-
-        WorkerCommand::Run => {
-            execute_job_from_stdin().await
-        }
-
-        WorkerCommand::Install { force } => {
-            handle_install(*force).await
         }
 
         WorkerCommand::Clean { include_voices } => {
@@ -76,43 +52,10 @@ pub async fn handle_worker_command(cmd: &WorkerCommand) -> Result<()> {
     }
 }
 
-/// Handle worker install command.
-async fn handle_install(force: bool) -> Result<()> {
-    use crate::bootstrap;
-
-    println!("Installing gen-audio worker dependencies...");
-
-    // Check current status
-    let status = bootstrap::check_status()?;
-
-    if status == bootstrap::BootstrapStatus::Ready && !force {
-        println!("Worker is already set up. Use --force to reinstall.");
-        return Ok(());
-    }
-
-    // Run bootstrap
-    bootstrap::ensure_bootstrapped().await?;
-
-    // Create worker directories
-    std::fs::create_dir_all(voices_dir())
-        .context("Failed to create voices directory")?;
-    std::fs::create_dir_all(output_dir())
-        .context("Failed to create output directory")?;
-
-    println!("Worker installation complete!");
-    println!();
-
-    // Show status
-    let status = get_worker_status();
-    println!("Device: {}", status.device);
-    println!("Chatterbox: {}", if status.chatterbox_installed { "installed" } else { "not installed" });
-    println!("Ready: {}", if status.ready { "yes" } else { "no" });
-
-    Ok(())
-}
-
 /// Handle worker clean command.
 fn handle_clean(include_voices: bool) -> Result<()> {
+    use anyhow::Context;
+
     // Clean output directory
     let output = output_dir();
     if output.exists() {

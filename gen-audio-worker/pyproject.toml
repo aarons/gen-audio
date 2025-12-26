@@ -1,0 +1,41 @@
+[project]
+name = "gen-audio-worker"
+version = "0.1.0"
+description = "TTS worker for gen-audio (SSH/SFTP mode)"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0",
+    "torchaudio>=2.0",
+    "soundfile>=0.12",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+chatterbox = [
+    "chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git",
+]
+kokoro = [
+    "kokoro>=0.1",
+]
+xtts = [
+    "TTS>=0.22",
+]
+all = [
+    "gen-audio-worker[chatterbox,kokoro,xtts]",
+]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+gen-audio-worker = "gen_audio_worker.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gen_audio_worker"]

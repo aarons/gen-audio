@@ -68,8 +68,8 @@ impl Worker {
 
         self.connected = true;
 
-        // Get worker status
-        let output = self.connection.exec("gen-audio worker status").await
+        // Get worker status (uses Python gen-audio-worker CLI)
+        let output = self.connection.exec("gen-audio-worker status").await
             .with_context(|| format!("Failed to get status from worker '{}'", self.name()))?;
 
         let status: WorkerStatus = serde_json::from_str(&output)
@@ -120,7 +120,7 @@ impl Worker {
         // Create a connection with job timeout
         let conn = SshConnection::new(self.config.clone(), timeout);
 
-        let output = conn.exec_with_input("gen-audio worker run", job_json.as_bytes()).await
+        let output = conn.exec_with_input("gen-audio-worker run", job_json.as_bytes()).await
             .with_context(|| format!("Job execution failed on worker '{}'", self.name()))?;
 
         let result: TtsResult = serde_json::from_slice(&output)

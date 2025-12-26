@@ -104,6 +104,7 @@ pub struct TtsResult {
 
 impl TtsResult {
     /// Create a successful result.
+    #[allow(dead_code)]
     pub fn success(
         job_id: impl Into<String>,
         duration_ms: u64,
@@ -183,6 +184,7 @@ pub struct WorkerStatus {
 
 impl WorkerStatus {
     /// Create a ready status.
+    #[allow(dead_code)]
     pub fn ready(device: impl Into<String>, available_disk_mb: u64) -> Self {
         Self {
             ready: true,
@@ -195,6 +197,7 @@ impl WorkerStatus {
     }
 
     /// Create a not-ready status with reason.
+    #[allow(dead_code)]
     pub fn not_ready(_reason: impl Into<String>) -> Self {
         Self {
             ready: false,

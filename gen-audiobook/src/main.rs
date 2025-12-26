@@ -1,29 +1,24 @@
-//! gen-audio - Convert EPUB files to audiobooks using Chatterbox TTS
+//! gen-audio - Convert EPUB files to audiobooks using distributed TTS workers
 
 mod audio;
-mod bootstrap;
 mod config;
 mod coordinator;
 mod epub;
 mod session;
-mod setup;
 mod text;
-mod tts;
 mod worker;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use std::os::unix::process::CommandExt;
 use config::GenAudioConfig;
 use indicatif::{ProgressBar, ProgressStyle};
 use session::Session;
 use std::path::PathBuf;
 use text::TextChunk;
-use tts::TtsOptions;
 
 #[derive(Parser, Debug)]
 #[command(name = "gen-audio")]
-#[command(about = "Convert EPUB files to audiobooks using Chatterbox TTS", long_about = None)]
+#[command(about = "Convert EPUB files to audiobooks using distributed TTS workers", long_about = None)]
 #[command(version)]
 struct Args {
     /// Path to the EPUB file
@@ -45,10 +40,6 @@ struct Args {
     #[arg(long)]
     chapters: Option<String>,
 
-    /// Device to use (mps, cuda, cpu). Auto-detects if not specified.
-    #[arg(long)]
-    device: Option<String>,
-
     /// Expressiveness/exaggeration (0.25-2.0, default 0.5)
     #[arg(long, default_value = "0.5")]
     exaggeration: f32,
@@ -65,10 +56,6 @@ struct Args {
     #[arg(short, long, default_value_t = false)]
     debug: bool,
 
-    /// Use distributed processing with remote workers
-    #[arg(long)]
-    distributed: bool,
-
     /// Specific workers to use (comma-separated names)
     #[arg(long)]
     workers: Option<String>,
@@ -80,29 +67,11 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Set up Python environment for Chatterbox TTS
-    Setup {
-        /// Upgrade existing packages
-        #[arg(long)]
-        upgrade: bool,
-
-        /// Remove bootstrap cache and re-download everything
-        #[arg(long)]
-        clean: bool,
-    },
-    /// Remove all gen-audio dependencies from the system
-    Uninstall {
-        /// Also remove Chatterbox models from HuggingFace cache
-        #[arg(long)]
-        include_models: bool,
-    },
     /// Configuration management
     Config {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Show environment info for debugging
-    Info,
     /// Worker mode for distributed processing (runs on remote GPU machines)
     Worker {
         #[command(subcommand)]
@@ -141,73 +110,14 @@ enum ConfigAction {
     },
 }
 
-/// Ensure PYTHONHOME is set before Python initializes.
-/// If not set, re-exec ourselves with the correct value.
-///
-/// This is needed because python-build-standalone has `/install` baked in
-/// as the prefix. By the time Rust code runs, dyld has already loaded
-/// libpython and its initialization fails. Re-exec ensures PYTHONHOME
-/// is set before the library loads.
-fn ensure_python_home() {
-    if std::env::var("PYTHONHOME").is_ok() {
-        return; // Already set
-    }
-
-    if let Some(python_home) = find_python_home() {
-        let exe = std::env::current_exe().expect("Failed to get current exe");
-        let args: Vec<_> = std::env::args().collect();
-
-        let err = std::process::Command::new(&exe)
-            .args(&args[1..])
-            .env("PYTHONHOME", &python_home)
-            .exec();
-
-        eprintln!("Warning: Failed to re-exec with PYTHONHOME: {}", err);
-    }
-}
-
-/// Find the Python home directory relative to the executable.
-fn find_python_home() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let exe_dir = exe.parent()?;
-
-    // Try multiple possible locations relative to executable:
-    // - ./gen-audio (project root) -> target/python-dev/python
-    // - target/release/gen-audiobook -> ../python-dev/python
-    // - target/debug/deps/gen_audiobook-xxx -> ../../python-dev/python (tests)
-    let candidates = [
-        exe_dir.join("target").join("python-dev").join("python"),
-        exe_dir.join("..").join("python-dev").join("python"),
-        exe_dir.join("..").join("..").join("python-dev").join("python"),
-    ];
-
-    for candidate in candidates {
-        if candidate.join("lib").join("python3.11").exists() {
-            return candidate.canonicalize().ok();
-        }
-    }
-    None
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
-    ensure_python_home();
-
     let args = Args::parse();
 
-    // Handle subcommands that don't need bootstrap
+    // Handle subcommands
     match &args.command {
-        Some(Commands::Setup { upgrade, clean }) => {
-            return handle_setup_command(*upgrade, *clean).await;
-        }
-        Some(Commands::Uninstall { include_models }) => {
-            return handle_uninstall_command(*include_models);
-        }
         Some(Commands::Config { action }) => {
             return handle_config_command(action);
-        }
-        Some(Commands::Info) => {
-            return show_info();
         }
         Some(Commands::Worker { action }) => {
             return worker::handle_worker_command(action).await;
@@ -216,14 +126,6 @@ async fn main() -> Result<()> {
             return coordinator::handle_workers_command(action).await;
         }
         None => {}
-    }
-
-    // Auto-bootstrap if needed
-    let paths = bootstrap::ensure_bootstrapped().await?;
-
-    // Set Python path for PyO3
-    unsafe {
-        std::env::set_var("PYO3_PYTHON", &paths.python);
     }
 
     // Require EPUB file for conversion
@@ -247,21 +149,11 @@ async fn main() -> Result<()> {
 
     // Build TTS options from args and config
     let voice_ref = args.voice.clone().or(config.voice_ref);
-    let tts_options = TtsOptions::new()
-        .with_exaggeration(args.exaggeration)
-        .with_cfg(args.cfg)
-        .with_temperature(args.temperature);
-    let tts_options = if let Some(ref voice) = voice_ref {
-        tts_options.with_voice_ref(voice.clone())
-    } else {
-        tts_options
-    };
 
     if args.debug {
         eprintln!("EPUB: {}", epub_path.display());
         eprintln!("Output: {}", output_path.display());
         eprintln!("Voice ref: {:?}", voice_ref);
-        eprintln!("Device: {:?}", args.device);
         eprintln!("Exaggeration: {}", args.exaggeration);
         eprintln!("CFG: {}", args.cfg);
         eprintln!("Temperature: {}", args.temperature);
@@ -330,31 +222,15 @@ async fn main() -> Result<()> {
     // Get temp directory for audio chunks
     let temp_dir = session::get_temp_dir(&session.session_id)?;
 
-    // Check if we should use distributed processing
-    let use_distributed = args.distributed || args.workers.is_some();
-
-    if use_distributed {
-        // Distributed processing with remote workers
-        process_distributed(
-            &mut session,
-            &chunks,
-            &args,
-            voice_ref.as_ref(),
-            &temp_dir,
-        )
-        .await?;
-    } else {
-        // Local processing
-        process_local(
-            &mut session,
-            &chunks,
-            &tts_options,
-            args.device.as_deref(),
-            voice_ref,
-            &temp_dir,
-        )
-        .await?;
-    }
+    // Process using distributed workers
+    process_distributed(
+        &mut session,
+        &chunks,
+        &args,
+        voice_ref.as_ref(),
+        &temp_dir,
+    )
+    .await?;
 
     // Save cover image to temp file if available
     let cover_path = if let Some(ref cover_bytes) = book.cover_image {
@@ -389,76 +265,6 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Process chunks using local TTS backend.
-async fn process_local(
-    session: &mut Session,
-    chunks: &[TextChunk],
-    tts_options: &TtsOptions,
-    device: Option<&str>,
-    voice_ref: Option<PathBuf>,
-    temp_dir: &PathBuf,
-) -> Result<()> {
-    // Initialize TTS backend
-    eprintln!("Initializing Chatterbox TTS...");
-    let backend = tts::create_backend(device, voice_ref)?;
-    eprintln!("Using device: {}", backend.device());
-
-    // Create progress bar
-    let (completed, total, _) = session::get_progress(session);
-    let pb = ProgressBar::new(total as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
-    pb.set_position(completed as u64);
-
-    // Generate audio for each chunk
-    while let Some((chapter_id, chunk_id)) = session::get_next_chunk(session) {
-        // Find the chunk text
-        let chunk_text = chunks
-            .iter()
-            .find(|c| c.chapter_id == chapter_id && c.chunk_id == chunk_id)
-            .map(|c| c.text.as_str())
-            .unwrap_or("");
-
-        if chunk_text.is_empty() {
-            // Skip empty chunks
-            session::mark_chunk_complete(
-                session,
-                chapter_id,
-                chunk_id,
-                &temp_dir.join("empty.wav"),
-            )?;
-            pb.inc(1);
-            continue;
-        }
-
-        let audio_path = temp_dir.join(format!("ch{:03}_chunk{:04}.wav", chapter_id, chunk_id));
-
-        pb.set_message(format!("Chapter {} chunk {}", chapter_id + 1, chunk_id + 1));
-
-        match backend
-            .synthesize_with_retry(chunk_text, &audio_path, tts_options, 3)
-            .await
-        {
-            Ok(()) => {
-                session::mark_chunk_complete(session, chapter_id, chunk_id, &audio_path)?;
-            }
-            Err(e) => {
-                session::mark_chunk_error(session, chapter_id, chunk_id, &e.to_string())?;
-                eprintln!("\nError generating chunk {}-{}: {}", chapter_id, chunk_id, e);
-            }
-        }
-
-        pb.inc(1);
-    }
-
-    pb.finish_with_message("Audio generation complete!");
-    Ok(())
-}
-
 /// Process chunks using distributed workers.
 async fn process_distributed(
     session: &mut Session,
@@ -479,7 +285,12 @@ async fn process_distributed(
 
     if workers_config.workers.is_empty() {
         anyhow::bail!(
-            "No workers configured. Add workers with: gen-audio workers add <name> <host> -u <user>"
+            "No workers configured.\n\n\
+             Quick start (local Docker worker):\n\
+             \x20 make run-worker\n\
+             \x20 ./gen-audio workers add local localhost -p 2222\n\n\
+             Or add a remote GPU (vast.ai, etc.):\n\
+             \x20 ./gen-audio workers add <name> <host> -u <user> -p <port>"
         );
     }
 
@@ -516,7 +327,7 @@ async fn process_distributed(
 
     let ready_count = pool.ready_workers().len();
     if ready_count == 0 {
-        anyhow::bail!("No workers are ready");
+        anyhow::bail!("No workers are ready. Ensure gen-audio-worker is installed on each worker.");
     }
 
     eprintln!("{} worker(s) ready", ready_count);
@@ -804,72 +615,5 @@ fn handle_config_command(action: &ConfigAction) -> Result<()> {
             println!("Default temperature set to: {}", config.temperature);
         }
     }
-    Ok(())
-}
-
-fn show_info() -> Result<()> {
-    println!("gen-audio environment info:\n");
-    println!("{}", bootstrap::get_info()?);
-    Ok(())
-}
-
-async fn handle_setup_command(upgrade: bool, clean: bool) -> Result<()> {
-    if clean {
-        eprintln!("Removing bootstrap cache...");
-        let stats = bootstrap::clean_all(false)?;
-        if stats.gen_audio_removed {
-            eprintln!(
-                "Removed {} of data.",
-                bootstrap::download::format_bytes(stats.gen_audio_size)
-            );
-        }
-        eprintln!("Run 'gen-audio <book.epub>' to re-bootstrap.\n");
-        return Ok(());
-    }
-
-    // Run bootstrap (will prompt if first run)
-    let _paths = bootstrap::ensure_bootstrapped().await?;
-
-    if upgrade {
-        eprintln!("\nUpgrading packages...");
-        bootstrap::python::install_packages(|msg| {
-            eprintln!("  {}", msg);
-        })?;
-        eprintln!("Packages upgraded successfully.");
-    }
-
-    Ok(())
-}
-
-fn handle_uninstall_command(include_models: bool) -> Result<()> {
-    eprintln!("Removing gen-audio dependencies...\n");
-
-    let stats = bootstrap::clean_all(include_models)?;
-
-    if stats.gen_audio_removed {
-        eprintln!(
-            "Removed gen-audio data directory ({}).",
-            bootstrap::download::format_bytes(stats.gen_audio_size)
-        );
-    } else {
-        eprintln!("No gen-audio data directory found.");
-    }
-
-    if include_models {
-        if stats.models_removed {
-            eprintln!(
-                "Removed Chatterbox models from cache ({}).",
-                bootstrap::download::format_bytes(stats.models_size)
-            );
-        } else {
-            eprintln!("No Chatterbox models found in cache.");
-        }
-    }
-
-    eprintln!(
-        "\nTotal space reclaimed: {}",
-        bootstrap::download::format_bytes(stats.total_size())
-    );
-
     Ok(())
 }

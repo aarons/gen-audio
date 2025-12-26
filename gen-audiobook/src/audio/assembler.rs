@@ -1,31 +1,18 @@
 //! Audio file assembly using FFmpeg.
 
 use super::metadata::{build_chapter_info, create_ffmpeg_metadata};
-use crate::bootstrap::ffmpeg as bootstrap_ffmpeg;
 use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
 
-/// Get the FFmpeg command, preferring bootstrapped version.
+/// Get the FFmpeg command (uses system FFmpeg).
 fn ffmpeg_command() -> Command {
-    if let Ok(path) = bootstrap_ffmpeg::get_ffmpeg_executable() {
-        if path.exists() {
-            return Command::new(path);
-        }
-    }
-    // Fallback to system ffmpeg
     Command::new("ffmpeg")
 }
 
-/// Get the FFprobe command, preferring bootstrapped version.
+/// Get the FFprobe command (uses system FFprobe).
 fn ffprobe_command() -> Command {
-    if let Ok(path) = bootstrap_ffmpeg::get_ffprobe_executable() {
-        if path.exists() {
-            return Command::new(path);
-        }
-    }
-    // Fallback to system ffprobe
     Command::new("ffprobe")
 }
 

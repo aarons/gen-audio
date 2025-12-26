@@ -1,0 +1,12 @@
+# Docker Compose override for CPU-only mode
+#
+# Usage: docker compose -f docker-compose.yml -f docker-compose.cpu.yml up
+
+services:
+  worker:
+    build:
+      dockerfile: Dockerfile.cpu
+    deploy:
+      resources:
+        reservations:
+          devices: []  # No GPU reservation
