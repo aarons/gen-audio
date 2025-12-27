@@ -82,11 +82,9 @@ impl Config {
         Ok(())
     }
 
-    /// Get the configuration file path
+    /// Get the configuration file path: ./config/llm.toml (project root)
     pub fn config_path() -> Result<PathBuf> {
-        let home =
-            std::env::var("HOME").map_err(|_| LlmError::ConfigError("HOME not set".into()))?;
-        Ok(PathBuf::from(home).join(".config/cli-programs/llm.toml"))
+        Ok(PathBuf::from("config").join("llm.toml"))
     }
 
     /// Get a preset by name
@@ -116,7 +114,7 @@ impl Default for Config {
     fn default() -> Self {
         let mut presets = HashMap::new();
 
-        // Default preset: claude-cli with sonnet model (matches current gc behavior)
+        // Default preset: claude-cli with sonnet model
         presets.insert(
             "claude-cli".to_string(),
             ModelPreset {
@@ -167,10 +165,7 @@ mod tests {
     #[test]
     fn test_config_path() {
         let path = Config::config_path().unwrap();
-        assert!(
-            path.to_string_lossy()
-                .contains(".config/cli-programs/llm.toml")
-        );
+        assert!(path.to_string_lossy().contains("config/llm.toml"));
     }
 
     #[test]
@@ -178,22 +173,22 @@ mod tests {
         let mut config = Config::default();
 
         // Without program-specific default, should fall back to default_preset
-        assert_eq!(config.get_default_for_program("gc"), "claude-cli");
-        assert_eq!(config.get_default_for_program("ask"), "claude-cli");
+        assert_eq!(config.get_default_for_program("bookworm"), "claude-cli");
+        assert_eq!(config.get_default_for_program("gen-audio"), "claude-cli");
 
         // Add program-specific defaults
         config
             .defaults
-            .insert("gc".to_string(), "anthropic-sonnet".to_string());
+            .insert("bookworm".to_string(), "anthropic-sonnet".to_string());
         config
             .defaults
-            .insert("ask".to_string(), "qwen3".to_string());
+            .insert("gen-audio".to_string(), "cerebras-llama".to_string());
 
         // Should now return program-specific defaults
-        assert_eq!(config.get_default_for_program("gc"), "anthropic-sonnet");
-        assert_eq!(config.get_default_for_program("ask"), "qwen3");
+        assert_eq!(config.get_default_for_program("bookworm"), "anthropic-sonnet");
+        assert_eq!(config.get_default_for_program("gen-audio"), "cerebras-llama");
 
         // Unknown program should still fall back
-        assert_eq!(config.get_default_for_program("bookname"), "claude-cli");
+        assert_eq!(config.get_default_for_program("unknown"), "claude-cli");
     }
 }

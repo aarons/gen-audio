@@ -35,8 +35,6 @@ Output: "The Travelling Cat Chronicles - Hiro Arikawa.epub"
 
 ```bash
 cargo install --path bookworm
-# or using the workspace installer:
-cargo run -p update-cli-programs --release
 ```
 
 ## Usage
@@ -60,7 +58,7 @@ bookworm --debug
 
 ## Configuration
 
-bookworm uses the shared LLM configuration at `~/.config/cli-programs/llm.toml`.
+bookworm uses the shared LLM configuration at `./config/llm.toml` (in the project root).
 
 ### Managing Presets
 

@@ -67,13 +67,9 @@ impl Default for GenAudioConfig {
 }
 
 impl GenAudioConfig {
-    /// Get the config file path: ~/.config/cli-programs/gen-audio.toml
+    /// Get the config file path: ./config/gen-audio.toml (project root)
     pub fn config_path() -> Result<PathBuf> {
-        let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))?;
-        Ok(PathBuf::from(home)
-            .join(".config")
-            .join("cli-programs")
-            .join("gen-audio.toml"))
+        Ok(PathBuf::from("config").join("gen-audio.toml"))
     }
 
     /// Load config from file, returning default if file doesn't exist
@@ -122,7 +118,7 @@ mod tests {
         let path = GenAudioConfig::config_path();
         assert!(path.is_ok());
         let path = path.unwrap();
-        assert!(path.ends_with("cli-programs/gen-audio.toml"));
+        assert!(path.ends_with("config/gen-audio.toml"));
     }
 
     #[test]

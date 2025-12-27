@@ -6,3 +6,4 @@
 /logs/
 bookworm/assets/
 workers.toml
+config/

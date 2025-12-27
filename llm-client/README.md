@@ -1,6 +1,6 @@
 # llm-client
 
-Shared LLM client library for the cli-programs workspace.
+Shared LLM client library for the gen-audio workspace.
 
 ## Overview
 
@@ -13,7 +13,7 @@ This crate provides a unified interface for multiple LLM providers, allowing CLI
 
 ## Configuration
 
-Configuration is stored at `~/.config/cli-programs/llm.toml`:
+Configuration is stored at `./config/llm.toml` (in the project root):
 
 ```toml
 default_preset = "claude-cli"

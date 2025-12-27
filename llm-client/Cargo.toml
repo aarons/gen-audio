@@ -2,7 +2,7 @@
 name = "llm-client"
 version = "0.3.0"
 edition = "2024"
-description = "Shared LLM client library for cli-programs workspace"
+description = "Shared LLM client library for gen-audio workspace"
 
 [dependencies]
 anyhow = { workspace = true }

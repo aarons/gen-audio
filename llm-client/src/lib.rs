@@ -1,4 +1,4 @@
-//! Shared LLM client library for cli-programs workspace
+//! Shared LLM client library for gen-audio workspace
 //!
 //! Provides a unified interface for multiple LLM providers:
 //! - Claude CLI (subprocess)
