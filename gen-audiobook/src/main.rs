@@ -387,42 +387,42 @@ async fn process_distributed(
             .progress_chars("#>-"),
     );
 
-    // Run scheduler
+    // Run scheduler, saving progress incrementally
     let results = scheduler
-        .run_to_completion(|progress| {
-            pb.set_position(progress.completed as u64);
-            if !progress.workers.is_empty() {
-                let worker_info: Vec<String> = progress
-                    .workers
-                    .iter()
-                    .map(|w| format!("{}:{}", w.name, w.completed))
-                    .collect();
-                pb.set_message(worker_info.join(" "));
-            }
-        })
+        .run_to_completion(
+            |progress| {
+                pb.set_position(progress.completed as u64);
+                if !progress.workers.is_empty() {
+                    let worker_info: Vec<String> = progress
+                        .workers
+                        .iter()
+                        .map(|w| format!("{}:{}", w.name, w.completed))
+                        .collect();
+                    pb.set_message(worker_info.join(" "));
+                }
+            },
+            |result| {
+                // Save progress immediately so interrupted jobs can resume
+                if let (Some(chapter_id), Some(chunk_id)) = (
+                    parse_chapter_from_job_id(&result.job_id),
+                    parse_chunk_from_job_id(&result.job_id),
+                ) {
+                    match result.status {
+                        worker::protocol::JobStatus::Completed => {
+                            let audio_path = temp_dir.join(format!("{}.wav", result.job_id));
+                            let _ = session::mark_chunk_complete(session, chapter_id, chunk_id, &audio_path);
+                        }
+                        _ => {
+                            let error = result.error.as_deref().unwrap_or("Unknown error");
+                            let _ = session::mark_chunk_error(session, chapter_id, chunk_id, error);
+                        }
+                    }
+                }
+            },
+        )
         .await?;
 
     pb.finish_with_message("Distributed processing complete!");
-
-    // Update session with results
-    for result in &results {
-        // Parse chapter and chunk from job_id
-        if let (Some(chapter_id), Some(chunk_id)) = (
-            parse_chapter_from_job_id(&result.job_id),
-            parse_chunk_from_job_id(&result.job_id),
-        ) {
-            match result.status {
-                worker::protocol::JobStatus::Completed => {
-                    let audio_path = temp_dir.join(format!("{}.wav", result.job_id));
-                    session::mark_chunk_complete(session, chapter_id, chunk_id, &audio_path)?;
-                }
-                _ => {
-                    let error = result.error.as_deref().unwrap_or("Unknown error");
-                    session::mark_chunk_error(session, chapter_id, chunk_id, error)?;
-                }
-            }
-        }
-    }
 
     // Report summary
     let successful = results

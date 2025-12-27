@@ -135,9 +135,17 @@ impl JobScheduler {
     }
 
     /// Run the scheduler until all jobs complete.
-    pub async fn run_to_completion<F>(&mut self, mut on_progress: F) -> Result<Vec<TtsResult>>
+    ///
+    /// `on_progress` is called after each result to update progress display.
+    /// `on_result` is called for each completed result, allowing immediate persistence.
+    pub async fn run_to_completion<F, R>(
+        &mut self,
+        mut on_progress: F,
+        mut on_result: R,
+    ) -> Result<Vec<TtsResult>>
     where
         F: FnMut(SchedulerProgress),
+        R: FnMut(&TtsResult),
     {
         // Create channel for results
         let (tx, mut rx) = mpsc::channel::<(String, TtsResult)>(32);
@@ -185,7 +193,7 @@ impl JobScheduler {
 
                             let result = match result {
                                 Ok(r) => r,
-                                Err(e) => TtsResult::failure(&job_id, e.to_string()),
+                                Err(e) => TtsResult::failure(&job_id, format!("{:#}", e)),
                             };
 
                             let _ = tx.send((worker_name, result)).await;
@@ -222,7 +230,7 @@ impl JobScheduler {
             // Wait for a result with timeout
             tokio::select! {
                 Some((worker_name, result)) = rx.recv() => {
-                    self.handle_result(worker_name, result).await?;
+                    self.handle_result(worker_name, result, &mut on_result).await?;
                     on_progress(self.progress());
                 }
                 _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
@@ -235,7 +243,15 @@ impl JobScheduler {
     }
 
     /// Handle a completed job result.
-    async fn handle_result(&mut self, worker_name: String, result: TtsResult) -> Result<()> {
+    async fn handle_result<R>(
+        &mut self,
+        worker_name: String,
+        result: TtsResult,
+        on_result: &mut R,
+    ) -> Result<()>
+    where
+        R: FnMut(&TtsResult),
+    {
         // Find and remove the in-flight job
         let job_idx = self
             .in_flight
@@ -285,6 +301,7 @@ impl JobScheduler {
                     };
                 }
 
+                on_result(&result);
                 self.completed.push(result);
             }
             JobStatus::Failed | JobStatus::Timeout => {
@@ -307,6 +324,7 @@ impl JobScheduler {
                         self.max_retries,
                         result.error.as_deref().unwrap_or("unknown")
                     );
+                    on_result(&result);
                     self.completed.push(result);
                 }
             }
