@@ -11,6 +11,7 @@ import time
 WORKER_DIR = os.path.expanduser("~/.gen-audio/worker")
 VOICES_DIR = os.path.join(WORKER_DIR, "voices")
 OUTPUT_DIR = os.path.join(WORKER_DIR, "output")
+RESULTS_DIR = os.path.join(WORKER_DIR, "results")
 
 
 def get_available_disk_mb() -> int:
@@ -51,10 +52,20 @@ def cmd_status(args):
     print(json.dumps(status.to_dict()))
 
 
+def _write_result(result, job_id: str):
+    """Write result to file and print the path to stdout."""
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    result_path = os.path.join(RESULTS_DIR, f"{job_id}.json")
+    with open(result_path, "w") as f:
+        json.dump(result.to_dict(), f)
+    print(result_path)
+
+
 def cmd_run(args):
     """Run a single job from stdin (SSH/stdio mode).
 
-    Reads TtsJob JSON from stdin, writes audio to file, returns TtsResult JSON.
+    Reads TtsJob JSON from stdin, writes audio to file, writes TtsResult to file.
+    Prints only the result file path to stdout (avoids library output pollution).
     """
     from .models import TtsJob, TtsResult, get_model
 
@@ -63,7 +74,7 @@ def cmd_run(args):
         job_data = json.load(sys.stdin)
     except json.JSONDecodeError as e:
         result = TtsResult.failure("unknown", f"Invalid JSON: {e}")
-        print(json.dumps(result.to_dict()))
+        _write_result(result, "unknown")
         sys.exit(1)
 
     # Parse job
@@ -72,7 +83,7 @@ def cmd_run(args):
     except (KeyError, ValueError) as e:
         job_id = job_data.get("job_id", "unknown")
         result = TtsResult.failure(job_id, f"Invalid job: {e}")
-        print(json.dumps(result.to_dict()))
+        _write_result(result, job_id)
         sys.exit(1)
 
     # Ensure output directory exists
@@ -119,7 +130,7 @@ def cmd_run(args):
     except Exception as e:
         result = TtsResult.failure(job.job_id, str(e))
 
-    print(json.dumps(result.to_dict()))
+    _write_result(result, job.job_id)
 
 
 def main():

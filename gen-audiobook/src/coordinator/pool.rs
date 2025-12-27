@@ -109,6 +109,8 @@ impl Worker {
 /// Execute a job using worker config (no pool lock needed).
 ///
 /// This allows jobs to run in parallel without holding the pool mutex.
+/// The worker writes its result to a file and prints the path to stdout.
+/// We fetch the result file via SSH to avoid stdout pollution from libraries.
 pub async fn execute_job_standalone(
     config: &WorkerConfig,
     job: &TtsJob,
@@ -117,10 +119,30 @@ pub async fn execute_job_standalone(
     let conn = SshConnection::new(config.clone(), timeout);
     let job_json = serde_json::to_string(job)
         .context("Failed to serialize job")?;
+
+    // Run the job - stdout now contains the result file path (not JSON directly)
     let output = conn.exec_with_input("gen-audio-worker run", job_json.as_bytes()).await
         .with_context(|| format!("Job execution failed on worker '{}'", config.name))?;
-    serde_json::from_slice(&output)
-        .with_context(|| format!("Failed to parse job result from worker '{}'", config.name))
+
+    // Extract the result file path from stdout (last non-empty line)
+    let output_str = String::from_utf8_lossy(&output);
+    let result_path = output_str
+        .lines()
+        .filter(|line| !line.is_empty())
+        .last()
+        .ok_or_else(|| anyhow::anyhow!("No result path in worker output"))?
+        .trim();
+
+    // Fetch the result JSON from the file
+    let result_json = conn.exec(&format!("cat {}", result_path)).await
+        .with_context(|| format!("Failed to read result file '{}' from '{}'", result_path, config.name))?;
+
+    // Clean up the result file on the worker
+    let _ = conn.exec(&format!("rm -f {}", result_path)).await;
+
+    // Parse the result JSON
+    serde_json::from_str(&result_json)
+        .with_context(|| format!("Failed to parse result JSON from '{}': {}", config.name, result_json))
 }
 
 /// Pool of workers for distributed processing.

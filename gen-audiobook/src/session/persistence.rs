@@ -27,8 +27,9 @@ pub fn get_sessions_dir() -> Result<PathBuf> {
 }
 
 /// Get the temp directory for a session's audio files.
+/// Uses ./tmp/{session_id}/ in the current working directory.
 pub fn get_temp_dir(session_id: &str) -> Result<PathBuf> {
-    let temp_dir = get_data_dir()?.join("temp").join(session_id);
+    let temp_dir = std::env::current_dir()?.join("tmp").join(session_id);
     fs::create_dir_all(&temp_dir)?;
     Ok(temp_dir)
 }
@@ -228,7 +229,7 @@ pub fn cleanup_session(session: &Session) -> Result<()> {
     }
 
     // Remove temp directory with audio chunks
-    let temp_dir = get_data_dir()?.join("temp").join(&session.session_id);
+    let temp_dir = std::env::current_dir()?.join("tmp").join(&session.session_id);
     if temp_dir.exists() {
         fs::remove_dir_all(&temp_dir).context("Failed to remove temp directory")?;
     }
